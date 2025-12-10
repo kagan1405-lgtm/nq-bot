@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NQ Reversal Bot v2.3 (Standalone)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <h1>NQ Reversal <span class="version">v2.3</span></h1>
+            </div>
+        </header>
+
+        <div class="dashboard-bar hidden" id="dashboard">
+            <div class="kpi-card">
+                <span class="kpi-label">Net PnL ($)</span>
+                <span class="kpi-value" id="kpi-pnl">$0.00</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Net PnL (Pts)</span>
+                <span class="kpi-value" id="kpi-pts">0.00</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Win Rate</span>
+                <span class="kpi-value" id="kpi-winrate">0%</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Profit Factor</span>
+                <span class="kpi-value" id="kpi-pf">0.00</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Avg R:R</span>
+                <span class="kpi-value" id="kpi-rr">0.00</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Worst Day</span>
+                <span class="kpi-value" id="kpi-dd">0.00%</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Total Trades</span>
+                <span class="kpi-value" id="kpi-count">0</span>
+            </div>
+            <div class="kpi-card" style="border-left: 2px solid var(--primary);">
+                <span class="kpi-label">Best Performing Level</span>
+                <span class="kpi-value" style="font-size: 0.95rem" id="kpi-best">-</span>
+            </div>
+        </div>
+
+        <main>
+            <section class="control-panel">
+                <div class="card">
+                    <h2>Configuration</h2>
+                    <form id="backtest-form">
+                        <label for="data-file" class="upload-label">
+                            <div style="font-size:1.2rem">📂</div>
+                            <div>Select Sierra Chart File</div>
+                            <div id="file-name"></div>
+                        </label>
+                        <input type="file" id="data-file" name="file" accept=".txt,.csv" style="display:none" required>
+
+                        <div class="form-row">
+                            <div><label>TP (Pts)</label><input type="number" name="tp_points" value="50" step="0.25">
+                            </div>
+                            <div><label>SL (Pts)</label><input type="number" name="sl_points" value="10" step="0.25">
+                            </div>
+                        </div>
+
+                        <div><label>Offset (Front-Run)</label><input type="number" name="offset_points" value="5"
+                                step="0.25"></div>
+
+                        <div style="margin-bottom:1rem">
+                            <label class="toggle"><input type="checkbox" id="chk-hnln" checked><span
+                                    class="slider"></span><span>HN / LN</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-npoc" checked><span
+                                    class="slider"></span><span>nPOC</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-hva" checked><span
+                                    class="slider"></span><span>HVA / LVA (70%)</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-pday" checked><span
+                                    class="slider"></span><span>Prev Day (P-HD/LD)</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-dday" checked><span
+                                    class="slider"></span><span>Dynamic (D-HD/LD)</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-vwap" checked><span
+                                    class="slider"></span><span>VWAP</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-rnd" checked><span
+                                    class="slider"></span><span>Round Numbers</span></label>
+
+                            <div style="margin-top: 1rem; border-top: 1px solid #333; padding-top: 0.5rem;">
+                                <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.5rem;">Risk / Filters
+                                </div>
+                                <label class="toggle"><input type="checkbox" id="chk-dist-reset"><span
+                                        class="slider"></span><span>Use Distance Reset</span></label>
+                                <div
+                                    style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem;">
+                                    <label style="font-size: 0.85rem;">Reset Dist (Pts)</label>
+                                    <input type="number" id="inp-reset-dist" value="20" step="1"
+                                        style="width: 60px; padding: 4px;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" id="run-btn" class="cta-button">
+                            <span>Run Backtest</span>
+                            <div class="spinner hidden"></div>
+                        </button>
+                    </form>
+                </div>
+
+                <div id="debug-info"
+                    style="font-size: 0.7rem; color: #aaa; text-align: center; margin-top: -0.5rem; margin-bottom: 0.5rem;">
+                    Status: Ready
+                </div>
+
+                <div class="card" id="stats-container"
+                    style="display:none; flex-direction:column; flex:1; overflow:hidden;">
+                    <h2>Trigger Stats</h2>
+                    <div style="overflow-y:auto;">
+                        <table class="stats-table" style="width:100%; border: 1px solid #333;">
+                            <thead>
+                                <tr style="background:#222; color:#fff;">
+                                    <th>Level</th>
+                                    <th>#</th>
+                                    <th>Win%</th>
+                                    <th>PnL $</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section class="results-panel hidden" id="results-panel">
+                <div class="results-header">
+                    <h2>Trade Log</h2>
+                    <div style="font-size:0.75rem; color:var(--text-muted)">Click headers to sort</div>
+                </div>
+                <div class="table-wrapper">
+                    <table class="main-table" id="results-table">
+                        <thead>
+                            <tr id="sort-headers">
+                                <th data-key="date">Date</th>
+                                <th data-key="entryTime">Enter</th>
+                                <th data-key="dir">Dir</th>
+                                <th data-key="level">Level</th>
+                                <th data-key="trigPrice">Trig</th>
+                                <th data-key="entry">Entry</th>
+                                <th data-key="exitTime">Exit</th>
+                                <th data-key="exit">Exit $$</th>
+                                <th data-key="mfe">Max Profit</th>
+                                <th data-key="pnl">PnL Pts</th>
+                                <th data-key="pnlUsd">PnL $</th>
+                            </tr>
+
+                        </thead>
+                        <tbody id="trade-body"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js?v=1002"></script>
+</body>
+
+</html>
