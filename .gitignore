@@ -1,0 +1,8 @@
+
+# Valid VS Code settings/history
+.vscode/
+.history/
+
+# System files
+Thumbs.db
+Desktop.ini

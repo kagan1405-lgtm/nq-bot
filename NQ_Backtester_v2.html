@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NQ Reversal Bot v2.3 (Standalone)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f1115;
+            --bg-card: #181b21;
+            --bg-hover: #22262e;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --accent: #10b981;
+            --danger: #ef4444;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --border: #2d3139;
+            --glass: rgba(255, 255, 255, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .app-container {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            padding: 0.8rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-card);
+            flex-shrink: 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo h1 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .version {
+            font-size: 0.7rem;
+            background: var(--primary);
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            margin-left: 0.5rem;
+            color: #fff;
+        }
+
+        /* KPI Bar */
+        .dashboard-bar {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 0.8rem;
+            padding: 0.8rem 1.5rem;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            overflow-x: auto;
+        }
+
+        .kpi-card {
+            background: var(--bg-dark);
+            padding: 0.6rem 0.8rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .kpi-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+
+        .kpi-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .text-green {
+            color: var(--accent);
+        }
+
+        .text-red {
+            color: var(--danger);
+        }
+
+        /* Main Layout */
+        main {
+            flex: 1;
+            display: flex;
+            gap: 1rem;
+            padding: 1rem 1.5rem;
+            overflow: hidden;
+        }
+
+        .control-panel {
+            width: 280px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+
+        .results-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            padding: 1rem;
+        }
+
+        h2 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.8rem;
+            font-weight: 600;
+        }
+
+        /* Form */
+        label {
+            display: block;
+            font-size: 0.75rem;
+            margin-bottom: 0.3rem;
+            color: var(--text-muted);
+        }
+
+        input[type="number"],
+        input[type="text"] {
+            width: 100%;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-bottom: 0.8rem;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .form-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .upload-label {
+            border: 2px dashed var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+            text-align: center;
+            cursor: pointer;
+            background: var(--glass);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3rem;
+            margin-bottom: 1rem;
+            transition: 0.2s;
+        }
+
+        .upload-label:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        #file-name {
+            font-size: 0.75rem;
+            color: var(--accent);
+            min-height: 1rem;
+        }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            margin-bottom: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .toggle input {
+            display: none;
+        }
+
+        .slider {
+            width: 28px;
+            height: 16px;
+            background: var(--border);
+            border-radius: 20px;
+            position: relative;
+            transition: 0.3s;
+            flex-shrink: 0;
+        }
+
+        .slider::before {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: white;
+            top: 2px;
+            left: 2px;
+            transition: 0.3s;
+        }
+
+        input:checked+.slider {
+            background: var(--primary);
+        }
+
+        input:checked+.slider::before {
+            transform: translateX(12px);
+        }
+
+        .cta-button {
+            width: 100%;
+            background: var(--primary);
+            border: none;
+            color: white;
+            padding: 0.8rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .cta-button:hover {
+            background: var(--primary-hover);
+        }
+
+        .cta-button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        /* Trigger Stats Table (Small) */
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+        }
+
+        .stats-table th {
+            text-align: left;
+            color: var(--text-muted);
+            padding: 4px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 500;
+        }
+
+        .stats-table td {
+            padding: 4px;
+            border-bottom: 1px solid #333;
+        }
+
+        /* Main Results Table */
+        .results-header {
+            padding: 0.8rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-hover);
+        }
+
+        .table-wrapper {
+            flex: 1;
+            overflow: auto;
+        }
+
+        table.main-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        .main-table th {
+            background: var(--bg-dark);
+            padding: 0.6rem;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            cursor: pointer;
+            user-select: none;
+            border-bottom: 2px solid var(--border);
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: background 0.2s;
+        }
+
+        .main-table th:hover {
+            background: #222;
+            color: #fff;
+        }
+
+        .main-table th.sort-asc::after {
+            content: ' ▲';
+            font-size: 0.7em;
+        }
+
+        .main-table th.sort-desc::after {
+            content: ' ▼';
+            font-size: 0.7em;
+        }
+
+        .main-table td {
+            padding: 0.3rem 0.4rem;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .main-table tr:hover {
+            background: var(--glass);
+        }
+
+        /* Filter Row Inputs */
+        .filter-input {
+            width: 100%;
+            padding: 2px 4px;
+            font-size: 0.7rem;
+            background: #222;
+            border: 1px solid #444;
+            color: #ddd;
+            border-radius: 3px;
+            margin-top: 2px;
+            margin-bottom: 0;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #ffffff3d;
+            border-top: 2px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <h1>NQ Reversal <span class="version">v2.3</span></h1>
+            </div>
+        </header>
+
+        <div class="dashboard-bar hidden" id="dashboard">
+            <div class="kpi-card">
+                <span class="kpi-label">Net PnL ($)</span>
+                <span class="kpi-value" id="kpi-pnl">$0.00</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Net PnL (Pts)</span>
+                <span class="kpi-value" id="kpi-pts">0.00</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Win Rate</span>
+                <span class="kpi-value" id="kpi-winrate">0%</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Profit Factor</span>
+                <span class="kpi-value" id="kpi-pf">0.00</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Avg R:R</span>
+                <span class="kpi-value" id="kpi-rr">0.00</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Worst Day</span>
+                <span class="kpi-value" id="kpi-dd">0.00%</span>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Total Trades</span>
+                <span class="kpi-value" id="kpi-count">0</span>
+            </div>
+            <div class="kpi-card" style="border-left: 2px solid var(--primary);">
+                <span class="kpi-label">Best Performing Level</span>
+                <span class="kpi-value" style="font-size: 0.95rem" id="kpi-best">-</span>
+            </div>
+        </div>
+
+        <main>
+            <section class="control-panel">
+                <div class="card">
+                    <h2>Configuration</h2>
+                    <form id="backtest-form">
+                        <label for="data-file" class="upload-label">
+                            <div style="font-size:1.2rem">📂</div>
+                            <div>Select Sierra Chart File</div>
+                            <div id="file-name"></div>
+                        </label>
+                        <input type="file" id="data-file" name="file" accept=".txt,.csv" style="display:none" required>
+
+                        <div class="form-row">
+                            <div><label>TP (Pts)</label><input type="number" name="tp_points" value="50" step="0.25">
+                            </div>
+                            <div><label>SL (Pts)</label><input type="number" name="sl_points" value="10" step="0.25">
+                            </div>
+                        </div>
+
+                        <div><label>Offset (Front-Run)</label><input type="number" name="offset_points" value="5"
+                                step="0.25"></div>
+
+                        <div style="margin-bottom:1rem">
+                            <label class="toggle"><input type="checkbox" id="chk-hnln" checked><span
+                                    class="slider"></span><span>HN / LN</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-npoc" checked><span
+                                    class="slider"></span><span>nPOC</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-hva" checked><span
+                                    class="slider"></span><span>HVA / LVA (70%)</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-day" checked><span
+                                    class="slider"></span><span>Day (HD / LD)</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-vwap" checked><span
+                                    class="slider"></span><span>VWAP</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-rnd" checked><span
+                                    class="slider"></span><span>Round Numbers</span></label>
+                        </div>
+
+                        <button type="submit" id="run-btn" class="cta-button">
+                            <span>Run Backtest</span>
+                            <div class="spinner hidden"></div>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="card hidden" id="breakdown-card"
+                    style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+                    <h2>Trigger Statistics</h2>
+                    <div style="overflow-y:auto; flex:1;">
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Level</th>
+                                    <th>Trades</th>
+                                    <th>Win%</th>
+                                    <th>PnL $</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trigger-stats-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section class="results-panel hidden" id="results-panel">
+                <div class="results-header">
+                    <h2>Trade Log</h2>
+                    <div style="font-size:0.75rem; color:var(--text-muted)">Click headers to sort</div>
+                </div>
+                <div class="table-wrapper">
+                    <table class="main-table" id="results-table">
+                        <thead>
+                            <tr id="sort-headers">
+                                <th data-key="date">Date</th>
+                                <th data-key="entryTime">Enter</th>
+                                <th data-key="dir">Dir</th>
+                                <th data-key="level">Level</th>
+                                <th data-key="trigPrice">Trig</th>
+                                <th data-key="entry">Entry</th>
+                                <th data-key="exitTime">Exit</th>
+                                <th data-key="exit">Exit $$</th>
+                                <th data-key="mfe">Max Profit</th>
+                                <th data-key="pnl">PnL Pts</th>
+                                <th data-key="pnlUsd">PnL $</th>
+                            </tr>
+
+                        </thead>
+                        <tbody id="trade-body"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // --- LOGIC ---
+
+        class DateTime {
+            constructor(d, t) {
+                const p = d.trim().split(/[-/]/);
+                let Y, M, D;
+                if (p[0].length === 4) { [Y, M, D] = p; } else { [D, M, Y] = p; }
+                const [h, m, s] = t.trim().split(':');
+                this.date = new Date(+Y, M - 1, +D, +h, +m, parseFloat(s));
+                this.ts = this.date.getTime();
+            }
+            getDateStr() { return this.date.toISOString().split('T')[0]; }
+            getTimeStr() { return this.date.toLocaleTimeString(); }
+        }
+
+        function parseFile(file) {
+            return new Promise((res, rej) => {
+                const r = new FileReader();
+                r.onload = e => {
+                    const lines = e.target.result.trim().split('\n');
+                    let hIdx = 0;
+                    for (let i = 0; i < Math.min(lines.length, 50); i++)
+                        if (lines[i].toLowerCase().includes('date') && lines[i].toLowerCase().includes('time')) { hIdx = i; break; }
+
+                    const head = lines[hIdx].split(',').map(s => s.trim().toLowerCase());
+                    const map = {}; head.forEach((c, i) => map[c] = i);
+                    const col = (ns) => { for (let n of ns) if (map[n] !== undefined) return map[n]; return -1; };
+                    const C = { d: col(['date']), t: col(['time']), h: col(['high']), l: col(['low']), o: col(['open']), c: col(['close', 'last']), v: col(['vwap', 'volume weighted average price']) };
+
+                    if (C.d < 0) return rej("Invalid Format");
+                    const data = [];
+                    for (let i = hIdx + 1; i < lines.length; i++) {
+                        const row = lines[i].split(',');
+                        if (row.length < head.length) continue;
+                        try {
+                            data.push({
+                                dt: new DateTime(row[C.d], row[C.t]),
+                                o: +row[C.o], h: +row[C.h], l: +row[C.l], c: +row[C.c], v: C.v > -1 ? +row[C.v] : null
+                            });
+                        } catch (x) { }
+                    }
+                    res(data);
+                };
+                r.readAsText(file);
+            });
+        }
+
+        class Strategy {
+            constructor(data, cfg) { this.d = data; this.c = cfg; this.T = []; }
+            run() {
+                const days = [...new Set(this.d.map(x => x.dt.getDateStr()))].sort();
+                let pH = null, pL = null, pClose = 0;
+
+                days.forEach(day => {
+                    const bars = this.d.filter(b => b.dt.getDateStr() === day);
+                    const rth = bars.filter(b => { const h = b.dt.date.getHours(), m = b.dt.date.getMinutes(); return (h * 60 + m) >= 570 && (h * 60 + m) < 1020; }); // 09:30-17:00
+
+                    if (!rth.length) return;
+                    let lvls = [];
+
+                    if (pH !== null) {
+                        const openTs = rth[0].dt.ts;
+
+                        // --- NIGHT SESSION ANALYSIS ---
+                        const night = this.d.filter(b => b.dt.ts > pClose && b.dt.ts < openTs);
+                        if (night.length) {
+                            const hN = Math.max(...night.map(b => b.h));
+                            const lN = Math.min(...night.map(b => b.l));
+
+                            // TPO & Value Area
+                            const counts = {};
+                            night.forEach(b => {
+                                for (let p = Math.floor(b.l * 4); p <= Math.floor(b.h * 4); p++)
+                                    counts[p] = (counts[p] || 0) + 1;
+                            });
+
+                            const sortedPrices = Object.keys(counts).map(Number).sort((a, b) => a - b);
+                            const totalTPO = Object.values(counts).reduce((a, b) => a + b, 0);
+
+                            // Find POC
+                            let maxC = -1, pocTick = 0;
+                            for (const p of sortedPrices) {
+                                if (counts[p] > maxC) { maxC = counts[p]; pocTick = p; }
+                            }
+
+                            // Calculate Value Area (70%)
+                            const target = totalTPO * 0.7;
+                            let current = maxC;
+                            let upIdx = sortedPrices.indexOf(pocTick) + 1;
+                            let dnIdx = sortedPrices.indexOf(pocTick) - 1;
+
+                            while (current < target) {
+                                const upVol = (upIdx < sortedPrices.length) ? counts[sortedPrices[upIdx]] : 0;
+                                const dnVol = (dnIdx >= 0) ? counts[sortedPrices[dnIdx]] : 0;
+
+                                if (upVol === 0 && dnVol === 0) break;
+
+                                if (upVol >= dnVol) {
+                                    current += upVol; upIdx++;
+                                    if (dnVol > 0 && current < target) { current += dnVol; dnIdx--; }
+                                } else {
+                                    current += dnVol; dnIdx--;
+                                }
+                            }
+
+                            // Adjust bounds back to last included
+                            const hva = sortedPrices[Math.min(upIdx - 1, sortedPrices.length - 1)] / 4;
+                            const lva = sortedPrices[Math.max(dnIdx + 1, 0)] / 4;
+                            const poc = pocTick / 4;
+
+                            lvls.push({ n: 'nPOC', p: poc, a: 1, d: 'BOTH' });
+                            lvls.push({ n: 'HN', p: hN, a: 1, d: 'SHORT' });
+                            lvls.push({ n: 'LN', p: lN, a: 1, d: 'LONG' });
+                            lvls.push({ n: 'HVA', p: hva, a: 1, d: 'SHORT' });
+                            lvls.push({ n: 'LVA', p: lva, a: 1, d: 'LONG' });
+                        }
+
+                        // --- PREVIOUS DAY LEVELS ---
+                        lvls.push({ n: 'HD', p: pH, a: 1, d: 'SHORT' });
+                        lvls.push({ n: 'LD', p: pL, a: 1, d: 'LONG' });
+                    }
+
+                    this.sim(rth, lvls);
+                    pH = Math.max(...rth.map(b => b.h)); pL = Math.min(...rth.map(b => b.l));
+                    pClose = rth[rth.length - 1].dt.ts;
+                });
+                return this.T;
+            }
+
+            sim(bars, lvls) {
+                let pos = null;
+                // Session High/Low tracking
+                let sessH = -Infinity, sessL = Infinity;
+                if (bars.length) {
+                    // Do NOT pre-populate with the first bar's full range, otherwise we miss intra-bar expansion of the first bar.
+                    // Start fresh. 
+                }
+
+                // Add dynamic HD/LD objects if they don't exist (and if enabled)
+                // We will treat 'HD' and 'LD' in `lvls` as dynamic if they are meant to be today's levels
+                // But wait, the previous code passed Previous Day levels as HD/LD. 
+                // The user wants CURRENT Session levels. 
+                // Let's assume 'HD'/'LD' passed in are Previous Day. We'll add 'DynHD' / 'DynLD' ? 
+                // Or overwrite? User said: "created HD for the *current* session". 
+                // So triggers on NEW highs. 
+                // Let's look for existing HD/LD. If tpo_day is on, we'll maintain them.
+
+                for (let b of bars) {
+                    const tMin = b.dt.date.getHours() * 60 + b.dt.date.getMinutes();
+
+                    // 0. Force Close at 16:55 (1015 min) instead of 16:00
+                    if (pos && tMin >= 1015) {
+                        const ex = b.o;
+                        const st = 'C'; // Close at 16:55
+                        const rawPnlPts = pos.d === 'LONG' ? ex - pos.en : pos.en - ex;
+                        // No slip on market close? Or assume slip? Let's assume standard slip for market order.
+                        const ticksSlip = this.c.slip * 0.25;
+                        const slipCostPts = ticksSlip;
+                        const netPnlPts = rawPnlPts - slipCostPts;
+                        const grossUsd = rawPnlPts * 20;
+                        const totalComm = this.c.comm * 2;
+                        const slipUsd = slipCostPts * 20;
+                        const netUsd = grossUsd - totalComm - slipUsd;
+
+                        this.T.push({
+                            date: b.dt.getDateStr(), entryTime: pos.tStr, dir: pos.d, level: pos.ln,
+                            trigPrice: pos.tpP, entry: pos.en, exitTime: b.dt.getTimeStr(), exit: ex,
+                            pnl: netPnlPts, pnlUsd: netUsd, status: st,
+                            mfe: pos.maxFav,
+                            details: { gross: grossUsd, comm: totalComm, slip: slipUsd }
+                        });
+                        pos = null;
+                        // Don't continue; logic needs to proceed to update Levels (High/Low)
+                    }
+
+                    // 1. Construct Path (Segments)
+                    // Standard: Green (Open->Low->High->Close), Red (Open->High->Low->Close)
+                    // We treat them as points [p1, p2, p3, p4]
+                    let path = [];
+                    path.push({ p: b.o, t: b.dt.getTimeStr() }); // Open at 00 sec roughly
+                    if (b.c >= b.o) {
+                        path.push({ p: b.l, t: b.dt.getTimeStr() });
+                        path.push({ p: b.h, t: b.dt.getTimeStr() });
+                    } else {
+                        path.push({ p: b.h, t: b.dt.getTimeStr() });
+                        path.push({ p: b.l, t: b.dt.getTimeStr() });
+                    }
+                    path.push({ p: b.c, t: b.dt.getTimeStr() }); // Close
+
+                    // 2. Process Segments
+                    for (let i = 0; i < path.length - 1; i++) {
+                        const p1 = path[i].p;
+                        const p2 = path[i + 1].p;
+                        const tStr = path[i + 1].t; // Time of arrival at p2
+
+                        // --- DYNAMIC HD/LD UPDATES (Intra-Bar) ---
+                        // Update immediately at the start of a segment (e.g. at p1)
+                        // If p1 is a new high, we update HD. Then subsequent move p1->p2 can trigger off it.
+                        if (this.c.tpo_day) {
+                            if (path[i].p > sessH) { // Check the point itself, not p1 var yet
+                                sessH = path[i].p;
+                                let hd = lvls.find(x => x.n === 'HD');
+                                if (!hd) { hd = { n: 'HD', p: sessH, a: 1, d: 'SHORT' }; lvls.push(hd); }
+                                else { hd.p = sessH; hd.a = 1; } // Un-burn / Update
+                            }
+                            if (path[i].p < sessL) {
+                                sessL = path[i].p;
+                                let ld = lvls.find(x => x.n === 'LD');
+                                if (!ld) { ld = { n: 'LD', p: sessL, a: 1, d: 'LONG' }; lvls.push(ld); }
+                                else { ld.p = sessL; ld.a = 1; }
+                            }
+                            // Also check p2? No, p2 is the *target*. 
+                            // If p2 creates a new high, we'll catch it as p1 of the NEXT segment.
+                            // But what if it's the LAST point (Close)? 
+                            // If Close is new high, we update sessH, but no trade can happen until next bar.
+                            // So checking pot path[i].p (the 'from' point) is correct for catching reversals FROM that point.
+                        }
+
+                        // A. Check Exits (SL/TP)
+                        if (pos) {
+                            // Update MFE (Max Favorable) for this segment p1->p2
+                            const segMax = Math.max(p1, p2);
+                            const segMin = Math.min(p1, p2);
+
+                            if (pos.d === 'LONG') {
+                                pos.maxFav = Math.max(pos.maxFav, segMax - pos.en);
+                            } else {
+                                pos.maxFav = Math.max(pos.maxFav, pos.en - segMin);
+                            }
+
+                            // 2. Check Exits
+                            let ex = null, st = null;
+                            // segMin/segMax already defined above
+
+                            if (pos.d === 'LONG') {
+                                // Gaps
+                                if (p1 <= pos.sl) { ex = p1; st = 'L'; } // Gapped below SL
+                                else if (p1 >= pos.tp) { ex = p1; st = 'W'; } // Gapped above TP
+                                else {
+                                    // Cross
+                                    const hitSL = (pos.sl >= segMin && pos.sl <= segMax);
+                                    const hitTP = (pos.tp >= segMin && pos.tp <= segMax);
+                                    if (hitSL) { ex = pos.sl; st = 'L'; }
+                                    else if (hitTP) { ex = pos.tp; st = 'W'; }
+                                }
+                            } else { // SHORT
+                                // Gaps
+                                if (p1 >= pos.sl) { ex = p1; st = 'L'; } // Gapped above SL
+                                else if (p1 <= pos.tp) { ex = p1; st = 'W'; } // Gapped below TP
+                                else {
+                                    // Cross
+                                    const hitSL = (pos.sl >= segMin && pos.sl <= segMax);
+                                    const hitTP = (pos.tp >= segMin && pos.tp <= segMax);
+                                    if (hitSL) { ex = pos.sl; st = 'L'; }
+                                    else if (hitTP) { ex = pos.tp; st = 'W'; }
+                                }
+                            }
+
+
+                            if (ex !== null) {
+                                const rawPnlPts = pos.d === 'LONG' ? ex - pos.en : pos.en - ex;
+
+                                // Costs
+                                const ticksSlip = this.c.slip * 0.25; // 1 tick = 0.25
+                                // Slippage logic: Entry is usually limit (no slip), Exit is stop (slip).
+                                // If TP hit (Limit) -> No slip. If SL hit (Stop) -> Slip.
+                                // We'll apply slip to dragging the price worse.
+
+                                let slipCostPts = 0;
+                                if (st === 'L') slipCostPts = ticksSlip; // Only slip on Stop Loss
+
+                                // Adjusted PnL
+                                const netPnlPts = rawPnlPts - slipCostPts;
+                                const grossUsd = rawPnlPts * 20;
+                                const totalComm = this.c.comm * 2; // Round turn
+                                const slipUsd = slipCostPts * 20;
+                                const netUsd = grossUsd - totalComm - slipUsd;
+
+                                // Update MFE one last time if exit happened within segment?
+                                // Technically MFE is max excursion. If we exited at ex, MFE is at least favorable distance to ex.
+                                // But we already tracked [p1, p2]. The exit `ex` is within [p1, p2]. So `pos.maxFav` covers it.
+
+                                this.T.push({
+                                    date: b.dt.getDateStr(), entryTime: pos.tStr, dir: pos.d, level: pos.ln,
+                                    trigPrice: pos.tpP, entry: pos.en, exitTime: tStr, exit: ex,
+                                    pnl: netPnlPts, pnlUsd: netUsd, status: st,
+                                    mfe: pos.maxFav,
+                                    details: { gross: grossUsd, comm: totalComm, slip: slipUsd }
+                                });
+                                // Burn Logic
+                                const l = lvls.find(x => x.n === pos.ln);
+                                if (l && st === 'L') {
+                                    // If we burnt a 'Round' number, unlikely to affect others, but burn specific instance? 
+                                    // Tricky for Round numbers which are generated on fly.
+                                    // For persistent levels (HD, LN...), set active=0
+                                    if (l.n !== 'Round' && l.n !== 'VWAP') l.a = 0;
+                                }
+                                pos = null;
+                                continue; // Position closed, move to next segment? Standard is Re-entry same bar? No.
+                            }
+                        }
+
+                        // B. Check Entries (if no pos)
+                        // Only enter if within strict RTH (09:30 - 16:00)
+                        if (!pos && (b.dt.date.getHours() * 60 + b.dt.date.getMinutes()) < 960) {
+                            // Collect Triggers
+                            // 1. Static Levels (Day/Night TPO) & Dynamic HD/LD
+                            let active = lvls.filter(x => x.a);
+
+                            // 2. VWAP (Update VWAP level if exists, or add)
+                            if (b.v) {
+                                let v = active.find(x => x.n === 'VWAP');
+                                if (!v && lvls.find(x => x.n === 'VWAP')) v = lvls.find(x => x.n === 'VWAP');
+                                if (!v) { v = { n: 'VWAP', p: b.v, a: 1, d: 'BOTH' }; lvls.push(v); active.push(v); }
+                                else { v.p = b.v; if (!active.includes(v)) active.push(v); }
+                            }
+
+                            // 3. Round Numbers (Always Generate)
+                            const minP = Math.min(p1, p2), maxP = Math.max(p1, p2);
+                            const startR = Math.ceil(minP / 100) * 100;
+                            for (let r = startR; r <= maxP; r += 100) {
+                                active.push({ n: 'Round', p: r, a: 1, d: 'BOTH' });
+                            }
+
+                            // Check Triggers along segment p1->p2
+                            let potentials = [];
+                            for (let l of active) {
+                                const sT = l.p - this.c.off;
+                                const lT = l.p + this.c.off;
+                                if ((l.d === 'SHORT' || l.d === 'BOTH') && p1 < sT && p2 >= sT) {
+                                    potentials.push({ t: sT, type: 'SHORT', lvl: l });
+                                }
+                                if ((l.d === 'LONG' || l.d === 'BOTH') && p1 > lT && p2 <= lT) {
+                                    potentials.push({ t: lT, type: 'LONG', lvl: l });
+                                }
+                            }
+
+                            // Sort Potentials by distance from p1
+                            potentials.sort((a, b) => (p1 < p2) ? (a.t - b.t) : (b.t - a.t));
+
+                            // Execute First Valid
+                            if (potentials.length) {
+                                const hit = potentials[0];
+                                pos = {
+                                    d: hit.type,
+                                    en: hit.t,
+                                    sl: hit.type === 'LONG' ? hit.t - this.c.sl : hit.t + this.c.sl,
+                                    tp: hit.type === 'LONG' ? hit.t + this.c.tp : hit.t - this.c.tp,
+                                    ln: hit.lvl.n,
+                                    tpP: hit.lvl.p,
+                                    tStr: tStr,
+                                    maxFav: 0
+                                };
+
+                                // IMMEDIATE EXIT CHECK (Intra-segment)
+                                // We entered at `hit.t` (aka pos.en). The price moves to `p2` in this segment.
+                                // We must check if SL/TP is hit within [pos.en, p2].
+                                const startP = pos.en;
+                                const endP = p2;
+
+                                // Intra-segment MFE update
+                                const isegMax = Math.max(startP, endP);
+                                const isegMin = Math.min(startP, endP);
+                                if (pos.d === 'LONG') {
+                                    pos.maxFav = Math.max(pos.maxFav, isegMax - pos.en);
+                                } else {
+                                    pos.maxFav = Math.max(pos.maxFav, pos.en - isegMin);
+                                }
+
+                                let ex = null, st = null;
+                                // Note: No gaps possible here effectively, as we just started at pos.en.
+                                // But if [startP, endP] covers SL or TP, we exit.
+
+                                const segMin = Math.min(startP, endP);
+                                const segMax = Math.max(startP, endP);
+
+                                if (pos.d === 'LONG') {
+                                    const hitSL = (pos.sl >= segMin && pos.sl <= segMax);
+                                    const hitTP = (pos.tp >= segMin && pos.tp <= segMax);
+                                    if (hitSL) { ex = pos.sl; st = 'L'; }
+                                    else if (hitTP) { ex = pos.tp; st = 'W'; }
+                                } else { // SHORT
+                                    const hitSL = (pos.sl >= segMin && pos.sl <= segMax);
+                                    const hitTP = (pos.tp >= segMin && pos.tp <= segMax);
+                                    if (hitSL) { ex = pos.sl; st = 'L'; }
+                                    else if (hitTP) { ex = pos.tp; st = 'W'; }
+                                }
+
+                                if (ex !== null) {
+                                    // We exited in the same tick/segment we entered!
+                                    const rawPnlPts = pos.d === 'LONG' ? ex - pos.en : pos.en - ex;
+                                    const ticksSlip = this.c.slip * 0.25;
+                                    let slipCostPts = 0;
+                                    if (st === 'L') slipCostPts = ticksSlip;
+
+                                    const netPnlPts = rawPnlPts - slipCostPts;
+                                    const grossUsd = rawPnlPts * 20;
+                                    const totalComm = this.c.comm * 2;
+                                    const slipUsd = slipCostPts * 20;
+                                    const netUsd = grossUsd - totalComm - slipUsd;
+
+                                    this.T.push({
+                                        date: b.dt.getDateStr(), entryTime: pos.tStr, dir: pos.d, level: pos.ln,
+                                        trigPrice: pos.tpP, entry: pos.en, exitTime: tStr, exit: ex,
+                                        pnl: netPnlPts, pnlUsd: netUsd, status: st,
+                                        mfe: pos.maxFav, // might be 0 or small if closed immediately
+                                        details: { gross: grossUsd, comm: totalComm, slip: slipUsd }
+                                    });
+
+                                    const l = lvls.find(x => x.n === pos.ln);
+                                    if (l && st === 'L') {
+                                        if (l.n !== 'Round' && l.n !== 'VWAP') l.a = 0;
+                                    }
+                                    pos = null; // Closed immediately
+                                }
+                            }
+                        }
+                    } // end segments
+                }
+            }
+        }
+
+        let currentTrades = [];
+        let sortState = { col: 'date', dir: 1 }; // 1=Asc, -1=Desc
+
+        // --- RENDER ---
+        function render() {
+            // 1. FILTERING
+            let display = currentTrades.filter(t => {
+                const l = t.level;
+                if (['HN', 'LN'].includes(l)) return document.getElementById('chk-hnln').checked;
+                if (l === 'nPOC') return document.getElementById('chk-npoc').checked;
+                if (['HVA', 'LVA'].includes(l)) return document.getElementById('chk-hva').checked;
+                if (['HD', 'LD'].includes(l)) return document.getElementById('chk-day').checked;
+                if (l === 'VWAP') return document.getElementById('chk-vwap').checked;
+                if (l === 'Round') return document.getElementById('chk-rnd').checked;
+                return true;
+            });
+
+            // 2. Sort
+            const { col, dir } = sortState;
+            display.sort((a, b) => {
+                let vA = a[col], vB = b[col];
+
+                if (col === 'mfe') {
+                    // For Max Profit sort, we only care about Losers.
+                    // Treat non-losers as -Infinity so they always appear at the bottom (or top depending on dir).
+                    vA = (a.status === 'L') ? a.mfe : -999999;
+                    vB = (b.status === 'L') ? b.mfe : -999999;
+                }
+
+                if (col === 'entryTime' || col === 'exitTime') {
+                    // String time sort is tricky, rely on date+time usually. Simple string compare works for same format
+                }
+                if (vA < vB) return -1 * dir;
+                if (vA > vB) return 1 * dir;
+                return 0;
+            });
+
+            // 3. Render Table
+            const tbody = document.getElementById('trade-body');
+            tbody.innerHTML = display.map(t => `
+        <tr>
+            <td>${t.date}</td>
+            <td>${t.entryTime}</td>
+            <td style="color:${t.dir === 'LONG' ? '#4ade80' : '#f87171'}">${t.dir}</td>
+            <td>${t.level}</td>
+            <td>${t.trigPrice.toFixed(2)}</td>
+            <td>${t.entry.toFixed(2)}</td>
+            <td>${t.exitTime}</td>
+            <td>${t.exit.toFixed(2)}</td>
+            <td style="color:var(--accent)">${t.status === 'L' ? '+' + t.mfe.toFixed(2) : ''}</td>
+            <td class="${t.pnl >= 0 ? 'text-green' : 'text-red'}">${t.pnl.toFixed(2)}</td>
+            <td class="${t.pnl >= 0 ? 'text-green' : 'text-red'}">$${t.pnlUsd.toFixed(0)}</td>
+        </tr>
+    `).join('');
+
+            // Update Header Icons
+            document.querySelectorAll('#sort-headers th').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+                if (th.dataset.key === col) th.classList.add(dir === 1 ? 'sort-asc' : 'sort-desc');
+            });
+
+            // 4. Render Trigger Stats Table
+            const stats = {};
+            display.forEach(t => {
+                if (!stats[t.level]) stats[t.level] = { c: 0, w: 0, pnl: 0 };
+                stats[t.level].c++;
+                if (t.pnl > 0) stats[t.level].w++;
+                stats[t.level].pnl += t.pnlUsd;
+            });
+
+            document.getElementById('trigger-stats-body').innerHTML = Object.entries(stats)
+                .sort((a, b) => b[1].c - a[1].c)
+                .map(([lvl, s]) => `
+            <tr>
+                <td>${lvl}</td>
+                <td>${s.c}</td>
+                <td>${Math.round(s.w / s.c * 100)}%</td>
+                <td class="${s.pnl >= 0 ? 'text-green' : 'text-red'}">$${Math.round(s.pnl)}</td>
+            </tr>
+        `).join('');
+
+            // 5. Dashboard
+            const totalPdl = display.reduce((a, b) => a + b.pnlUsd, 0);
+            document.getElementById('kpi-pnl').textContent = '$' + totalPdl.toFixed(2);
+            document.getElementById('kpi-pnl').className = `kpi-value ${totalPdl >= 0 ? 'text-green' : 'text-red'}`;
+            document.getElementById('kpi-count').textContent = display.length;
+            const wins = display.filter(t => t.pnl > 0).length;
+            document.getElementById('kpi-winrate').textContent = display.length ? (wins / display.length * 100).toFixed(1) + '%' : '0%';
+
+            // Advanced Stats
+            const losses = display.filter(t => t.pnl <= 0).length;
+            const grossWin = display.filter(t => t.pnl > 0).reduce((a, b) => a + b.pnlUsd, 0);
+            const grossLoss = Math.abs(display.filter(t => t.pnl <= 0).reduce((a, b) => a + b.pnlUsd, 0));
+
+            // Profit Factor
+            const pf = grossLoss === 0 ? (grossWin > 0 ? 100 : 0) : (grossWin / grossLoss);
+            document.getElementById('kpi-pf').textContent = pf.toFixed(2);
+
+            // Avg R:R
+            const avgWin = wins > 0 ? grossWin / wins : 0;
+            const avgLoss = losses > 0 ? grossLoss / losses : 0;
+            const rr = avgLoss > 0 ? (avgWin / avgLoss) : 0;
+            document.getElementById('kpi-rr').textContent = rr.toFixed(2);
+
+            // Worst Day
+            const dailyPnL = {};
+            display.forEach(t => {
+                dailyPnL[t.date] = (dailyPnL[t.date] || 0) + t.pnlUsd;
+            });
+            let worstDay = 0;
+            let worstDate = '-';
+            Object.entries(dailyPnL).forEach(([d, pnl]) => {
+                if (pnl < worstDay) { worstDay = pnl; worstDate = d; }
+            });
+
+            document.getElementById('kpi-dd').className = 'kpi-value text-red';
+            document.getElementById('kpi-dd').innerHTML = `$${worstDay.toFixed(0)} <span style="color:#fff; font-size:0.75rem; margin-left:4px; font-weight:400">(${worstDate})</span>`;
+
+            document.getElementById('kpi-pts').textContent = display.reduce((a, b) => a + b.pnl, 0).toFixed(2);
+
+            // Best Level
+            let bestLvl = '-'; let bestPnl = -Infinity;
+            Object.entries(stats).forEach(([l, s]) => { if (s.pnl > bestPnl) { bestPnl = s.pnl; bestLvl = l; } });
+            document.getElementById('kpi-best').textContent = bestLvl !== '-' ? `${bestLvl} ($${bestPnl.toFixed(0)})` : '-';
+        }
+
+        // --- EVENTS ---
+        document.getElementById('backtest-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const btn = document.getElementById('run-btn');
+            btn.disabled = true; btn.querySelector('.spinner').classList.remove('hidden');
+            try {
+                const f = document.getElementById('data-file').files[0];
+                if (!f) throw new Error("No file");
+                const data = await parseFile(f);
+                const fd = new FormData(e.target);
+                const engine = new Strategy(data, {
+                    sl: +fd.get('sl_points'), tp: +fd.get('tp_points'), off: +fd.get('offset_points'),
+                    comm: 0, slip: 0,
+                    tpo_day: document.getElementById('chk-day').checked
+                });
+                currentTrades = engine.run();
+                document.querySelectorAll('.hidden').forEach(el => el.classList.remove('hidden'));
+                document.querySelector('.spinner').classList.add('hidden'); // fix spinner stuck
+                render();
+            } catch (err) { alert(err); console.error(err); }
+            finally { btn.disabled = false; btn.querySelector('.spinner').classList.add('hidden'); }
+        });
+
+        document.getElementById('data-file').addEventListener('change', function () { if (this.files[0]) document.getElementById('file-name').textContent = this.files[0].name; });
+
+        // Sort Click
+        document.querySelectorAll('#sort-headers th').forEach(th => {
+            th.addEventListener('click', () => {
+                const key = th.dataset.key;
+                if (sortState.col === key) sortState.dir *= -1;
+                else { sortState.col = key; sortState.dir = 1; }
+                render();
+            });
+        });
+
+        // Toggle Listeners
+        ['chk-hnln', 'chk-npoc', 'chk-hva', 'chk-day', 'chk-vwap', 'chk-rnd'].forEach(id => {
+            document.getElementById(id).addEventListener('change', render);
+        });
+    </script>
+</body>
+
+</html>
