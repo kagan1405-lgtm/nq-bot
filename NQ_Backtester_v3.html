@@ -472,6 +472,8 @@
                                     class="slider"></span><span>HVA / LVA (70%)</span></label>
                             <label class="toggle"><input type="checkbox" id="chk-pday" checked><span
                                     class="slider"></span><span>Prev Day (P-HD/LD)</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-dev-tpo" checked><span
+                                    class="slider"></span><span>Developing TPO (d-POC/VA)</span></label>
                             <label class="toggle"><input type="checkbox" id="chk-dday" checked><span
                                     class="slider"></span><span>Dynamic (D-HD/LD)</span></label>
                             <label class="toggle"><input type="checkbox" id="chk-sp" checked><span
@@ -500,22 +502,24 @@
                                 <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.5rem;">Strategy
                                     Enhancements
                                 </div>
-                                <label class="toggle"><input type="checkbox" id="chk-or-filter"><span
-                                        class="slider"></span><span>OR Filter (30m)</span></label>
-                                <label class="toggle"><input type="checkbox" id="chk-dynamic-tp"><span
-                                        class="slider"></span><span>Dynamic TP</span></label>
+                                <div class="col-md-6">
+                                    <h6>Strategy Enhancements</h6>
+                                    <label class="toggle"><input type="checkbox" id="chk-or-filter"><span
+                                            class="slider"></span><span>OR Filter (30m)</span></label>
+                                    <label class="toggle"><input type="checkbox" id="chk-dynamic-tp"><span
+                                            class="slider"></span><span>Dynamic TP</span></label>
+                                </div>
                             </div>
                             <!-- Debug Mode -->
                             <div style="margin-top: 1rem; border-top: 1px solid #333; padding-top: 0.5rem;">
                                 <label class="toggle"><input type="checkbox" id="chk-debug"><span
                                         class="slider"></span><span>Enable Debug Log (Console)</span></label>
                             </div>
-                        </div>
 
-                        <button type="submit" id="run-btn" class="cta-button">
-                            <span>Run Backtest</span>
-                            <div class="spinner hidden"></div>
-                        </button>
+                            <button type="submit" id="run-btn" class="cta-button">
+                                <span>Run Backtest</span>
+                                <div class="spinner hidden"></div>
+                            </button>
                     </form>
                 </div>
 
@@ -905,7 +909,7 @@
                         if (this.c.gap && this.gapRepo.length > 0) {
                             this.gapRepo.forEach(g => {
                                 // Inherit global Offset unless specific logic needed
-                                // User mentioned "Cancel the 2 pts... maybe 25530" which is +5. 
+                                // User mentioned "Cancel the 2 pts... maybe 25530" which is +5.
                                 // We will rely on global offset or default props if we want.
                                 // For now use standard level struct.
                                 lvls.push({ n: 'GAP', p: g.p, a: 1, d: g.d, gapTarget: g.target });
@@ -917,26 +921,9 @@
 
                     this.sim(rth, lvls);
                     pH = Math.max(...rth.map(b => b.h)); pL = Math.min(...rth.map(b => b.l));
-                    pClose = rth[rth.length - 1].dt.ts;
-                    // Note: pClose is TS here? No, in sim() we pushed ex. Waiting.
-                    // Original code: pClose = rth[rth.length - 1].dt.ts; 
-                    // WAIT, pClose should be PRICE for Gap Detection!
-                    // Line 189 in original: pClose = rth[rth.length - 1].dt.ts; <- This looks like a BUG in original or I misread.
-                    // Let's check constructor/usage. 
-                    // Usage: const night = this.d.filter(b => b.dt.ts > pClose ... 
-                    // Yes, pClose IS TIMESTAMP in the original code logic for filtering time.
-                    // BUT for GAP Price we need the PRICE.
-                    // I need to track pClosePrice separately or extract it.
-
-                    // Re-reading original line 50: let pH = null, pL = null, pClose = 0; (Initialized to 0)
-                    // Re-reading original line 189: pClose = rth[rth.length - 1].dt.ts; (Updated to TS)
-
-                    // I need to capture the CLOSE PRICE of the last bar.
                     if (rth.length) {
                         this.prevClosePrice = rth[rth.length - 1].c;
                         pClose = rth[rth.length - 1].dt.ts;
-                    } else {
-                        // First loop day, pClose is 0.
                     }
 
                     // --- POST-SESSION SP UPDATE ---
@@ -985,8 +972,8 @@
                     const tMin = b.dt.date.getHours() * 60 + b.dt.date.getMinutes();
 
                     // --- UPDATE DEVELOPING TPO (Bar Completion) ---
-                    // We update at START of processing this bar (Simulating "Real Time" as bar forms? 
-                    // No, usually TPO updates AS price prints. 
+                    // We update at START of processing this bar (Simulating "Real Time" as bar forms?
+                    // No, usually TPO updates AS price prints.
                     // For backtest accuracy on 1-min bars:
                     // ideally we treat the levels as updating continuously.
                     // But we can simply update with THIS bar's range, then calculate levels for THIS bar's trade logic?
@@ -994,7 +981,7 @@
                     // User said "Developing", implying real-time.
                     // Decision: Add bar to TPO -> Update Levels -> Check Trades.
                     // This implies we are trading against the profile INCLUDING this bar's activity so far.
-                    // Since we use 'path' (intra-bar), the level would shift intra-bar. 
+                    // Since we use 'path' (intra-bar), the level would shift intra-bar.
                     // Approximation: Update TPO with this bar, set 'updated' = tMin.
 
                     dayTPO.add(b);
@@ -1016,8 +1003,9 @@
                         }
                     };
 
-                    if (this.c.npoc) updateDynLvl('d-POC', dTPO.poc, 'BOTH');
-                    if (this.c.hva) {
+                    // DECOUPLED: Controlled by new Checkbox
+                    if (this.c.dev_tpo) {
+                        updateDynLvl('d-POC', dTPO.poc, 'BOTH');
                         updateDynLvl('d-HVA', dTPO.hva, 'SHORT'); // Value High -> Short
                         updateDynLvl('d-LVA', dTPO.lva, 'LONG');  // Value Low -> Long
                     }
@@ -1610,6 +1598,7 @@
                         npoc: document.getElementById('chk-npoc').checked,
                         hva: document.getElementById('chk-hva').checked,
                         pday: document.getElementById('chk-pday').checked,
+                        dev_tpo: document.getElementById('chk-dev-tpo').checked,
                         dday: document.getElementById('chk-dday').checked,
                         vwap: document.getElementById('chk-vwap').checked,
                         rnd: document.getElementById('chk-rnd').checked,
