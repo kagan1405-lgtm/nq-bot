@@ -643,6 +643,65 @@
             });
         }
 
+        // TPO Builder Helper Class
+        class TPOBuilder {
+            constructor() {
+                this.counts = {};
+                this.totalTPO = 0;
+                this.minP = Infinity;
+                this.maxP = -Infinity;
+            }
+            add(b) {
+                const start = Math.floor(b.l * 4);
+                const end = Math.floor(b.h * 4);
+                for (let p = start; p <= end; p++) {
+                    this.counts[p] = (this.counts[p] || 0) + 1;
+                    if (p < this.minP) this.minP = p;
+                    if (p > this.maxP) this.maxP = p;
+                    this.totalTPO++;
+                }
+            }
+            calc() {
+                if (this.totalTPO === 0) return { poc: 0, hva: 0, lva: 0 };
+
+                const prices = [];
+                for (let p = this.minP; p <= this.maxP; p++) {
+                    if (this.counts[p]) prices.push(p);
+                }
+
+                let maxC = -1, pocTick = 0;
+                for (const p of prices) {
+                    if (this.counts[p] > maxC) { maxC = this.counts[p]; pocTick = p; }
+                }
+
+                const target = this.totalTPO * 0.7;
+                let current = maxC;
+                let upIdx = prices.indexOf(pocTick) + 1;
+                let dnIdx = prices.indexOf(pocTick) - 1;
+
+                while (current < target) {
+                    const upVol = (upIdx < prices.length) ? this.counts[prices[upIdx]] : 0;
+                    const dnVol = (dnIdx >= 0) ? this.counts[prices[dnIdx]] : 0;
+
+                    if (upVol === 0 && dnVol === 0) break;
+
+                    if (upVol >= dnVol) {
+                        current += upVol;
+                        upIdx++;
+                    } else {
+                        current += dnVol;
+                        dnIdx--;
+                    }
+                }
+
+                return {
+                    poc: pocTick / 4,
+                    hva: prices[Math.min(upIdx - 1, prices.length - 1)] / 4,
+                    lva: prices[Math.max(dnIdx + 1, 0)] / 4
+                };
+            }
+        }
+
         class Strategy {
             constructor(data, cfg) { this.d = data; this.c = cfg; this.T = []; this.debugLogs = []; }
             run() {
@@ -915,14 +974,53 @@
                 return this.T;
             }
 
-
-
             sim(bars, lvls) {
                 let pos = null;
                 let sessH = -Infinity, sessL = Infinity;
 
+                // Developing TPO State
+                const dayTPO = new TPOBuilder();
+
                 for (let b of bars) {
                     const tMin = b.dt.date.getHours() * 60 + b.dt.date.getMinutes();
+
+                    // --- UPDATE DEVELOPING TPO (Bar Completion) ---
+                    // We update at START of processing this bar (Simulating "Real Time" as bar forms? 
+                    // No, usually TPO updates AS price prints. 
+                    // For backtest accuracy on 1-min bars:
+                    // ideally we treat the levels as updating continuously.
+                    // But we can simply update with THIS bar's range, then calculate levels for THIS bar's trade logic?
+                    // OR do we trade against levels calculated from PRIOR bars?
+                    // User said "Developing", implying real-time.
+                    // Decision: Add bar to TPO -> Update Levels -> Check Trades.
+                    // This implies we are trading against the profile INCLUDING this bar's activity so far.
+                    // Since we use 'path' (intra-bar), the level would shift intra-bar. 
+                    // Approximation: Update TPO with this bar, set 'updated' = tMin.
+
+                    dayTPO.add(b);
+                    const dTPO = dayTPO.calc();
+
+                    // Update Dynamic TPO Levels
+                    // Helper to update/create
+                    const updateDynLvl = (name, price, dir) => {
+                        let l = lvls.find(x => x.n === name);
+                        if (!l) {
+                            // Create new
+                            lvls.push({ n: name, p: price, a: 1, d: dir, updated: tMin });
+                        } else {
+                            // Update existing only if price changed significantly?
+                            if (l.p !== price) {
+                                l.p = price;
+                                l.updated = tMin; // Reset 5-min timer
+                            }
+                        }
+                    };
+
+                    if (this.c.npoc) updateDynLvl('d-POC', dTPO.poc, 'BOTH');
+                    if (this.c.hva) {
+                        updateDynLvl('d-HVA', dTPO.hva, 'SHORT'); // Value High -> Short
+                        updateDynLvl('d-LVA', dTPO.lva, 'LONG');  // Value Low -> Long
+                    }
 
                     // 0. Force Close at 16:55 (1015 min)
                     if (pos && tMin >= 1015) {
@@ -1075,7 +1173,8 @@
                                     // --- DISTANCE RESET LOGIC (Locking) ---
                                     // If SL Hit and Feature Enabled for specific levels
                                     if (st === 'L' && this.c.useDistReset) {
-                                        const targetTypes = ['VWAP', 'nPOC', 'mPOC', 'RN'];
+                                        // Include new Dynamic TPO levels in locking logic
+                                        const targetTypes = ['VWAP', 'nPOC', 'mPOC', 'RN', 'd-POC'];
                                         const levelObj = lvls.find(l => l.n === pos.ln || (l.n.startsWith('RN') && pos.ln.startsWith('RN')));
 
                                         if (levelObj && (targetTypes.includes(levelObj.n) || levelObj.n.startsWith('RN'))) {
@@ -1084,7 +1183,7 @@
                                         }
                                     }
 
-                                    // Burn Logic for Static Levels
+                                    // Burn Logic for Static Levels and Semi-Dynamic
                                     const l = lvls.find(x => x.n === pos.ln);
                                     if (l && st === 'L') {
                                         const burnList = ['P-HD', 'P-LD', 'HN', 'LN'];
@@ -1128,9 +1227,16 @@
 
                                 let potentials = [];
                                 for (let l of active) {
-                                    // Dynamic Level Settlement Rule (User Deviation)
-                                    // If D-HD or D-LD, must be at least 5 mins old.
-                                    if ((l.n === 'D-HD' || l.n === 'D-LD')) {
+                                    // 1. Static TPO 30-Minute Guard (User Rule)
+                                    // Avoid trading Night/Static levels in first 30 mins of RTH (until 10:00)
+                                    if (['nPOC', 'HVA', 'LVA', 'HN', 'LN'].includes(l.n)) {
+                                        if (currentMin < 600) continue;
+                                    }
+
+                                    // 2. Dynamic Level Settlement Rule (User Deviation)
+                                    // If D-HD, D-LD, d-POC, d-HVA, d-LVA -> Must be at least 5 mins old.
+                                    const dynLevels = ['D-HD', 'D-LD', 'd-POC', 'd-HVA', 'd-LVA'];
+                                    if (dynLevels.includes(l.n)) {
                                         // If updated undefined (legacy), assume okay. If defined, check diff.
                                         if (l.updated !== undefined && (currentMin - l.updated < 5)) continue;
                                     }
