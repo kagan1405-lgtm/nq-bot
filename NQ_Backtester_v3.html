@@ -1208,9 +1208,9 @@
                                 let active = lvls.filter(x => x.a);
                                 // VWAP/Round Logic
                                 if (this.c.vwap && b.v) {
-                                    // 30 Minute Guard for VWAP (Don't trade first 30 mins 09:30-10:00)
-                                    // User Deviation: Ignore VWAP in first 30 mins.
-                                    if (currentMin >= 600) {
+                                    // 15 Minute Guard for VWAP (Don't trade first 15 mins 09:30-09:45)
+                                    // User Deviation: Ignore VWAP in first 15 mins.
+                                    if (currentMin >= 585) {
                                         let v = active.find(x => x.n === 'VWAP');
                                         if (!v && lvls.find(x => x.n === 'VWAP')) v = lvls.find(x => x.n === 'VWAP');
                                         if (!v) { v = { n: 'VWAP', p: b.v, a: 1, d: 'BOTH' }; lvls.push(v); active.push(v); }
@@ -1227,12 +1227,6 @@
 
                                 let potentials = [];
                                 for (let l of active) {
-                                    // 1. Static TPO 30-Minute Guard (User Rule)
-                                    // Avoid trading Night/Static levels in first 30 mins of RTH (until 10:00)
-                                    if (['nPOC', 'HVA', 'LVA', 'HN', 'LN'].includes(l.n)) {
-                                        if (currentMin < 600) continue;
-                                    }
-
                                     // 2. Dynamic Level Settlement Rule (User Deviation)
                                     // If D-HD, D-LD, d-POC, d-HVA, d-LVA -> Must be at least 5 mins old.
                                     const dynLevels = ['D-HD', 'D-LD', 'd-POC', 'd-HVA', 'd-LVA'];
