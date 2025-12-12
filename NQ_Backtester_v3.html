@@ -750,11 +750,12 @@
                             const tpoStandard = calcTPO(night);
 
                             // 2. Debug Loop: Globez (18:00 Start approx) -> pClose is 17:00
+                            // Globex starts 1 hour after close.
                             const nightGlobez = night.filter(b => b.dt.ts >= (pClose + 3600000));
                             const tpoGlobez = nightGlobez.length ? calcTPO(nightGlobez) : tpoStandard;
 
-                            // USE STANDARD FOR NOW
-                            const { hva, lva, poc } = tpoStandard;
+                            // USE GLOBEZ (18:00 Start) to match standard trader profiles
+                            const { hva, lva, poc } = tpoGlobez;
 
                             if (this.c.npoc) lvls.push({ n: 'nPOC', p: poc, a: 1, d: 'BOTH' });
                             if (this.c.hnln) {
@@ -953,16 +954,16 @@
                                 // Use separate D-HD for Dynamic Day High
                                 let hd = lvls.find(x => x.n === 'D-HD');
                                 if (this.c.dday) {
-                                    if (!hd) { hd = { n: 'D-HD', p: sessH, a: 1, d: 'SHORT' }; lvls.push(hd); }
-                                    else { hd.p = sessH; hd.a = 1; }
+                                    if (!hd) { hd = { n: 'D-HD', p: sessH, a: 1, d: 'SHORT', updated: minTime }; lvls.push(hd); }
+                                    else { hd.p = sessH; hd.a = 1; hd.updated = minTime; }
                                 }
                             }
                             if (path[i].p < sessL) {
                                 sessL = path[i].p;
                                 let ld = lvls.find(x => x.n === 'D-LD');
                                 if (this.c.dday) {
-                                    if (!ld) { ld = { n: 'D-LD', p: sessL, a: 1, d: 'LONG' }; lvls.push(ld); }
-                                    else { ld.p = sessL; ld.a = 1; }
+                                    if (!ld) { ld = { n: 'D-LD', p: sessL, a: 1, d: 'LONG', updated: minTime }; lvls.push(ld); }
+                                    else { ld.p = sessL; ld.a = 1; ld.updated = minTime; }
                                 }
                             }
                         }
@@ -970,12 +971,12 @@
                         // --- OPENING RANGE LOGIC (09:30 - 10:00) ---
                         // RTH Starts 09:30 (570 min). OR Ends 10:00 (600 min).
                         let orH = null, orL = null;
-                        const minTime = b.dt.date.getHours() * 60 + b.dt.date.getMinutes();
+                        const minTimeForOR = b.dt.date.getHours() * 60 + b.dt.date.getMinutes();
 
                         // We need to calculate OR High/Low dynamically if we are past 10:00
                         // For simplicity, we can do this just once per day or check efficiently.
                         // Since this loop is bar-by-bar, let's just calc if needed.
-                        if (this.c.orFilter && minTime >= 600) {
+                        if (this.c.orFilter && minTimeForOR >= 600) {
                             // Find 09:30-10:00 bars for this day.
                             // Optimization: We can compute this outside the loop once per day, but 'path' is granular.
                             // Let's assume 'rth' contains all bars for the day.
@@ -1090,14 +1091,18 @@
                             }
 
                             // B. Check Entries
-                            if (!pos && (b.dt.date.getHours() * 60 + b.dt.date.getMinutes()) < 960) {
+                            const currentMin = b.dt.date.getHours() * 60 + b.dt.date.getMinutes();
+                            if (!pos && currentMin < 960) {
                                 let active = lvls.filter(x => x.a);
                                 // VWAP/Round Logic
                                 if (this.c.vwap && b.v) {
-                                    let v = active.find(x => x.n === 'VWAP');
-                                    if (!v && lvls.find(x => x.n === 'VWAP')) v = lvls.find(x => x.n === 'VWAP');
-                                    if (!v) { v = { n: 'VWAP', p: b.v, a: 1, d: 'BOTH' }; lvls.push(v); active.push(v); }
-                                    else { v.p = b.v; if (!active.includes(v)) active.push(v); }
+                                    // 5 Minute Guard for VWAP (Don't trade first 5 mins 09:30-09:35)
+                                    if (currentMin >= 575) {
+                                        let v = active.find(x => x.n === 'VWAP');
+                                        if (!v && lvls.find(x => x.n === 'VWAP')) v = lvls.find(x => x.n === 'VWAP');
+                                        if (!v) { v = { n: 'VWAP', p: b.v, a: 1, d: 'BOTH' }; lvls.push(v); active.push(v); }
+                                        else { v.p = b.v; if (!active.includes(v)) active.push(v); }
+                                    }
                                 }
                                 const minP = Math.min(p1, p2), maxP = Math.max(p1, p2);
                                 if (this.c.rnd) {
@@ -1109,6 +1114,9 @@
 
                                 let potentials = [];
                                 for (let l of active) {
+                                    // Filter out D-HD / D-LD if they were updated THIS same minute (prevent self-front-running)
+                                    if ((l.n === 'D-HD' || l.n === 'D-LD') && l.updated === currentMin) continue;
+
                                     // Determine effective offset for this level
                                     const effectiveOffset = (l.props && l.props.off !== undefined) ? l.props.off : this.c.off;
 
