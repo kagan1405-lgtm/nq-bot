@@ -1109,8 +1109,9 @@
                                 let active = lvls.filter(x => x.a);
                                 // VWAP/Round Logic
                                 if (this.c.vwap && b.v) {
-                                    // 5 Minute Guard for VWAP (Don't trade first 5 mins 09:30-09:35)
-                                    if (currentMin >= 575) {
+                                    // 30 Minute Guard for VWAP (Don't trade first 30 mins 09:30-10:00)
+                                    // User Deviation: Ignore VWAP in first 30 mins.
+                                    if (currentMin >= 600) {
                                         let v = active.find(x => x.n === 'VWAP');
                                         if (!v && lvls.find(x => x.n === 'VWAP')) v = lvls.find(x => x.n === 'VWAP');
                                         if (!v) { v = { n: 'VWAP', p: b.v, a: 1, d: 'BOTH' }; lvls.push(v); active.push(v); }
@@ -1127,8 +1128,12 @@
 
                                 let potentials = [];
                                 for (let l of active) {
-                                    // Filter out D-HD / D-LD if they were updated THIS same minute (prevent self-front-running)
-                                    if ((l.n === 'D-HD' || l.n === 'D-LD') && l.updated === currentMin) continue;
+                                    // Dynamic Level Settlement Rule (User Deviation)
+                                    // If D-HD or D-LD, must be at least 5 mins old.
+                                    if ((l.n === 'D-HD' || l.n === 'D-LD')) {
+                                        // If updated undefined (legacy), assume okay. If defined, check diff.
+                                        if (l.updated !== undefined && (currentMin - l.updated < 5)) continue;
+                                    }
 
                                     // Determine effective offset for this level
                                     const effectiveOffset = (l.props && l.props.off !== undefined) ? l.props.off : this.c.off;
