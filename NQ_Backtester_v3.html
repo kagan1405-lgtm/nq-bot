@@ -749,9 +749,27 @@
                             // 1. Standard
                             const tpoStandard = calcTPO(night);
 
-                            // 2. Debug Loop: Globez (18:00 Start approx) -> pClose is 17:00
-                            // Globex starts 1 hour after close.
-                            const nightGlobez = night.filter(b => b.dt.ts >= (pClose + 3600000));
+                            // 2. Globez (18:00 Start approx)
+                            let globezStartTs = pClose + 3600000;
+                            if (pClose === 0 && night.length > 0) {
+                                // First day in file. Try to detect session break.
+                                // Look for gap > 45 mins.
+                                let lastTs = night[0].dt.ts;
+                                for (let i = 1; i < night.length; i++) {
+                                    if (night[i].dt.ts - lastTs > 45 * 60 * 1000) {
+                                        globezStartTs = night[i].dt.ts;
+                                        break;
+                                    }
+                                    lastTs = night[i].dt.ts;
+                                }
+                                // If no gap, assume night[0] IS the Globez start (if hour is ~18:00)
+                                if (globezStartTs === 3600000) { // Unchanged
+                                    if (night[0].dt.date.getHours() >= 17) globezStartTs = night[0].dt.ts;
+                                }
+                            }
+
+                            const nightGlobez = night.filter(b => b.dt.ts >= globezStartTs);
+                            // Fallback to Standard if Globez empty
                             const tpoGlobez = nightGlobez.length ? calcTPO(nightGlobez) : tpoStandard;
 
                             // USE GLOBEZ (18:00 Start) to match standard trader profiles
