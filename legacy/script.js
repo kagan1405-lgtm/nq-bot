@@ -44,10 +44,12 @@ function parseFile(file) {
 }
 
 class Strategy {
-    constructor(data, cfg) { this.d = data; this.c = cfg; this.T = []; }
+    constructor(data, cfg) { this.d = data; this.c = cfg; this.T = []; this.debugLogs = []; }
     run() {
         const days = [...new Set(this.d.map(x => x.dt.getDateStr()))].sort();
-        let pH = null, pL = null, pClose = 0;
+        let pH = null, pL = null, pClose = 0, prevClosePrice = null; // pClose is TS, prevClosePrice is Price
+        this.spRepo = []; // Persistence for Single Prints
+        this.gapRepo = []; // Persistence for Unfilled Gaps
 
         days.forEach(day => {
             const bars = this.d.filter(b => b.dt.getDateStr() === day);
@@ -61,6 +63,56 @@ class Strategy {
 
                 // --- NIGHT SESSION ANALYSIS ---
                 const night = this.d.filter(b => b.dt.ts > pClose && b.dt.ts < openTs);
+
+                // Gap Detection
+                if (this.c.gap && night.length > 0) {
+                    // 1. Check existing Gaps - Did night session fill them?
+                    // "Filled" means price touched the Gap's TARGET (the original pClose of that gap).
+                    // Gap Object: { p: OpenPrice, target: OriginalClose, d: Dir, date: DateStr }
+
+                    const nightH = Math.max(...night.map(b => b.h));
+                    const nightL = Math.min(...night.map(b => b.l));
+
+                    // Filter OUT filled gaps
+                    this.gapRepo = this.gapRepo.filter(g => {
+                        let filled = false;
+                        if (g.d === 'LONG') { // Gap Up, Target is Below
+                            if (nightL <= g.target) filled = true;
+                        } else { // Gap Down, Target is Above
+                            if (nightH >= g.target) filled = true;
+                        }
+                        return !filled;
+                    });
+
+                    // 2. Detect NEW Gap (Today's Night Open vs Yesterday's Close)
+                    const nightOpenBar = night[0];
+                    const nightOpen = nightOpenBar.o;
+                    // Gap Up: Open > pClose
+                    // Gap Down: Open < pClose
+                    let newGap = null;
+                    if (prevClosePrice !== null) {
+                        if (nightOpen > prevClosePrice) {
+                            newGap = { p: nightOpen, target: prevClosePrice, d: 'LONG', date: day, n: 'GAP' }; // Support
+                        } else if (nightOpen < prevClosePrice) {
+                            newGap = { p: nightOpen, target: prevClosePrice, d: 'SHORT', date: day, n: 'GAP' }; // Resistance
+                        }
+                    }
+
+                    // 3. Check if NEW Gap was immediately filled in Night Session
+                    if (newGap) {
+                        let filledNow = false;
+                        if (newGap.d === 'LONG') {
+                            if (nightL <= newGap.target) filledNow = true;
+                        } else {
+                            if (nightH >= newGap.target) filledNow = true;
+                        }
+
+                        if (!filledNow) {
+                            this.gapRepo.push(newGap);
+                        }
+                    }
+                }
+
                 if (night.length) {
                     const hN = Math.max(...night.map(b => b.h));
                     const lN = Math.min(...night.map(b => b.l));
@@ -101,15 +153,6 @@ class Strategy {
                     const nightGlobez = night.filter(b => b.dt.ts >= (pClose + 3600000));
                     const tpoGlobez = nightGlobez.length ? calcTPO(nightGlobez) : tpoStandard;
 
-                    // LOGGING
-                    if (day.includes('2025-12-05')) {
-                        console.log(`DEBUG 12-05: 17:00 HVA=${tpoStandard.hva} | 18:00 HVA=${tpoGlobez.hva}`);
-                        setTimeout(() => {
-                            const dbg = document.getElementById('debug-info');
-                            if (dbg) dbg.innerHTML = `<span style='color:orange'>DEBUG DEC 5:</span> 17:00 HVA=${tpoStandard.hva} | 18:00 HVA=${tpoGlobez.hva} | <span style='color:white'>Target: 25736.75</span>`;
-                        }, 1000);
-                    }
-
                     // USE STANDARD FOR NOW
                     const { hva, lva, poc } = tpoStandard;
 
@@ -129,14 +172,131 @@ class Strategy {
                     lvls.push({ n: 'P-HD', p: pH, a: 1, d: 'SHORT' });
                     lvls.push({ n: 'P-LD', p: pL, a: 1, d: 'LONG' });
                 }
+
+                // --- SINGLE PRINTS (SP) LOGIC ---
+                if (this.c.sp && night.length > 0) {
+                    const spMap = {}; // Price -> Set(PeriodIndex)
+                    // Group Night Session into 30m Buckets
+                    const startTs = night[0].dt.ts;
+                    night.forEach(b => {
+                        const diffMs = b.dt.ts - startTs;
+                        const pIdx = Math.floor(diffMs / (30 * 60 * 1000)); // 0, 1, 2...
+                        for (let p = Math.floor(b.l * 4); p <= Math.floor(b.h * 4); p++) {
+                            if (!spMap[p]) spMap[p] = new Set();
+                            spMap[p].add(pIdx);
+                        }
+                    });
+
+                    // Identify Single Prints (Count === 1)
+                    const singles = [];
+                    Object.keys(spMap).forEach(k => {
+                        if (spMap[k].size === 1) singles.push(Number(k));
+                    });
+                    singles.sort((a, b) => a - b);
+
+                    // Cluster them into Zones
+                    // Increase min size to 8 ticks (2 points) to reduce noise
+                    if (singles.length > 0) {
+                        let clusters = [];
+                        let currentCluster = [singles[0]];
+
+                        for (let i = 1; i < singles.length; i++) {
+                            if (singles[i] === singles[i - 1] + 1) {
+                                currentCluster.push(singles[i]);
+                            } else {
+                                if (currentCluster.length >= 8) clusters.push(currentCluster);
+                                currentCluster = [singles[i]];
+                            }
+                        }
+                        if (currentCluster.length >= 8) clusters.push(currentCluster);
+
+                        // Create Levels from Clusters
+                        clusters.forEach(c => {
+                            const botP = c[0] / 4;
+                            const topP = c[c.length - 1] / 4;
+                            // Unified Name 'SP'
+                            // Front-run 5 pts, Fixed SL 10, TP 50
+                            // We define specific props for this level type
+                            lvls.push({ n: 'SP', p: topP, a: 1, d: 'LONG', props: { off: 5, sl: 10, tp: 50 } });
+                            lvls.push({ n: 'SP', p: botP, a: 1, d: 'SHORT', props: { off: 5, sl: 10, tp: 50 } });
+                        });
+                    }
+                } // End SP Logic
+
+                // --- ADD ACTIVE GAPS TO LEVELS ---
+                if (this.c.gap && this.gapRepo.length > 0) {
+                    this.gapRepo.forEach(g => {
+                        // Inherit global Offset unless specific logic needed
+                        // User mentioned "Cancel the 2 pts... maybe 25530" which is +5. 
+                        // We will rely on global offset or default props if we want.
+                        // For now use standard level struct.
+                        lvls.push({ n: 'GAP', p: g.p, a: 1, d: g.d, gapTarget: g.target });
+                    });
+                }
+
             }
+
 
             this.sim(rth, lvls);
             pH = Math.max(...rth.map(b => b.h)); pL = Math.min(...rth.map(b => b.l));
             pClose = rth[rth.length - 1].dt.ts;
+            // Note: pClose is TS here? No, in sim() we pushed ex. Waiting.
+            // Original code: pClose = rth[rth.length - 1].dt.ts; 
+            // WAIT, pClose should be PRICE for Gap Detection!
+            // Line 189 in original: pClose = rth[rth.length - 1].dt.ts; <- This looks like a BUG in original or I misread.
+            // Let's check constructor/usage. 
+            // Usage: const night = this.d.filter(b => b.dt.ts > pClose ... 
+            // Yes, pClose IS TIMESTAMP in the original code logic for filtering time.
+            // BUT for GAP Price we need the PRICE.
+            // I need to track pClosePrice separately or extract it.
+
+            // Re-reading original line 50: let pH = null, pL = null, pClose = 0; (Initialized to 0)
+            // Re-reading original line 189: pClose = rth[rth.length - 1].dt.ts; (Updated to TS)
+
+            // I need to capture the CLOSE PRICE of the last bar.
+            if (rth.length) {
+                this.prevClosePrice = rth[rth.length - 1].c;
+                pClose = rth[rth.length - 1].dt.ts;
+            } else {
+                // First loop day, pClose is 0.
+            }
+
+            // --- POST-SESSION SP UPDATE ---
+            if (this.c.sp) {
+                // Remove burned
+                this.spRepo = this.spRepo.filter(l => l.a === 1);
+                // Add Today's RTH SPs (for tomorrow)
+                if (rth.length > 0) {
+                    const rthSPs = this.getSPs(rth);
+                    rthSPs.forEach(l => {
+                        this.spRepo.push({ ...l, props: { off: 5, sl: 10, tp: 50 }, a: 1 });
+                    });
+                }
+            }
+
+            // --- POST-SESSION GAP CLEANUP (Day Session Update) ---
+            if (this.c.gap && this.gapRepo.length > 0) {
+                // Check if Day Session filled any gaps
+                const dayH = Math.max(...rth.map(b => b.h));
+                const dayL = Math.min(...rth.map(b => b.l));
+
+                this.gapRepo = this.gapRepo.filter(g => {
+                    let filled = false;
+                    if (g.d === 'LONG') { // Support Level
+                        // Gap Filled if price went DOWN to target (pClose)
+                        if (dayL <= g.target) filled = true;
+                    } else { // Resistance
+                        if (dayH >= g.target) filled = true;
+                    }
+                    return !filled;
+                });
+            }
+
         });
         return this.T;
     }
+
+
 
     sim(bars, lvls) {
         let pos = null;
@@ -204,6 +364,28 @@ class Strategy {
                             if (!ld) { ld = { n: 'D-LD', p: sessL, a: 1, d: 'LONG' }; lvls.push(ld); }
                             else { ld.p = sessL; ld.a = 1; }
                         }
+                    }
+                }
+
+                // --- OPENING RANGE LOGIC (09:30 - 10:00) ---
+                // RTH Starts 09:30 (570 min). OR Ends 10:00 (600 min).
+                let orH = null, orL = null;
+                const minTime = b.dt.date.getHours() * 60 + b.dt.date.getMinutes();
+
+                // We need to calculate OR High/Low dynamically if we are past 10:00
+                // For simplicity, we can do this just once per day or check efficiently.
+                // Since this loop is bar-by-bar, let's just calc if needed.
+                if (this.c.orFilter && minTime >= 600) {
+                    // Find 09:30-10:00 bars for this day.
+                    // Optimization: We can compute this outside the loop once per day, but 'path' is granular.
+                    // Let's assume 'rth' contains all bars for the day.
+                    const orBars = bars.filter(x => {
+                        const t = x.dt.date.getHours() * 60 + x.dt.date.getMinutes();
+                        return t >= 570 && t < 600;
+                    });
+                    if (orBars.length) {
+                        orH = Math.max(...orBars.map(x => x.h));
+                        orL = Math.min(...orBars.map(x => x.l));
                     }
                 }
 
@@ -327,8 +509,11 @@ class Strategy {
 
                         let potentials = [];
                         for (let l of active) {
-                            const sT = l.p - this.c.off;
-                            const lT = l.p + this.c.off;
+                            // Determine effective offset for this level
+                            const effectiveOffset = (l.props && l.props.off !== undefined) ? l.props.off : this.c.off;
+
+                            const sT = l.p - effectiveOffset;
+                            const lT = l.p + effectiveOffset;
 
                             // Standard Logic: Fade the Level
                             // If coming from BELOW (Up Move) -> SHORT
@@ -357,29 +542,113 @@ class Strategy {
                         potentials.sort((a, b) => (p1 < p2) ? (a.t - b.t) : (b.t - a.t));
 
                         if (potentials.length) {
+                            if (this.c.debug) {
+                                this.debugLogs.push({
+                                    d: b.dt.getDateStr(), t: b.dt.getTimeStr(), e: 'Check',
+                                    m: `Potentials: ${potentials.map(x => `${x.type} @ ${x.t} (Lvl: ${x.lvl.n})`).join(', ')}`
+                                });
+                            }
                             const hit = potentials[0];
                             // Check if Locked
                             if (hit.lvl.locked) {
                                 // console.log(`Skipped Locked Level ${hit.lvl.n} at ${Math.max(p1,p2)}`);
                             } else {
-                                pos = {
-                                    d: hit.type,
-                                    en: hit.t,
-                                    sl: hit.type === 'LONG' ? hit.t - this.c.sl : hit.t + this.c.sl,
-                                    tp: hit.type === 'LONG' ? hit.t + this.c.tp : hit.t - this.c.tp,
-                                    ln: hit.lvl.n,
-                                    tpP: hit.lvl.p,
-                                    tStr: tStr,
-                                    maxFav: 0
-                                };
-                                p1 = pos.en;
-                                segmentDone = false;
+                                // --- OR FILTER CHECK ---
+                                let allowed = true;
+                                if (this.c.orFilter && orH !== null && orL !== null) {
+                                    if (hit.type === 'SHORT' && hit.t > orH) { allowed = false; if (this.c.debug) console.log(`  -> Filtered by OR (Short > ${orH})`); }
+                                    if (hit.type === 'LONG' && hit.t < orL) { allowed = false; if (this.c.debug) console.log(`  -> Filtered by OR (Long < ${orL})`); }
+                                }
+
+                                if (allowed) {
+                                    if (this.c.debug) console.log(`  -> TRADE TAKEN: ${hit.type} @ ${hit.t} (Lvl: ${hit.lvl.n})`);
+                                    let calcTp = this.c.tp;
+                                    let calcSl = this.c.sl;
+
+                                    // --- DYNAMIC TP LOGIC ---
+                                    if (this.c.dynamicTP) {
+                                        let bestDist = Infinity;
+                                        for (let l of active) {
+                                            if (l.n === hit.lvl.n) continue;
+                                            let dist = Infinity;
+                                            if (hit.type === 'LONG' && l.p > hit.t) dist = l.p - hit.t;
+                                            else if (hit.type === 'SHORT' && l.p < hit.t) dist = hit.t - l.p;
+
+                                            if (dist > 0 && dist < bestDist) bestDist = dist;
+                                        }
+                                        if (bestDist !== Infinity) calcTp = bestDist;
+                                    }
+
+                                    // --- CUSTOM PROPS OVERRIDE (SP) ---
+                                    if (hit.lvl.props) {
+                                        if (hit.lvl.props.sl !== undefined) calcSl = hit.lvl.props.sl;
+                                        if (hit.lvl.props.tp !== undefined) calcTp = hit.lvl.props.tp; // Fixed TP overrides Dynamic
+                                    }
+                                    pos = {
+                                        d: hit.type,
+                                        en: hit.t,
+                                        sl: hit.type === 'LONG' ? hit.t - calcSl : hit.t + calcSl,
+                                        tp: hit.type === 'LONG' ? hit.t + calcTp : hit.t - calcTp,
+                                        ln: hit.lvl.n,
+                                        tpP: hit.lvl.p,
+                                        tStr: tStr,
+                                        maxFav: 0
+                                    };
+
+                                    // STRICT BURN LOGIC FOR SP
+                                    if (hit.lvl.n === 'SP') {
+                                        hit.lvl.a = 0;
+                                    }
+
+                                    p1 = pos.en;
+                                    segmentDone = false;
+
+                                }
                             }
                         }
                     } // end while
                 } // end segment
             }
         }
+    }
+    getSPs(bars) {
+        if (!bars || !bars.length) return [];
+        const spMap = {};
+        const startTs = bars[0].dt.ts;
+        bars.forEach(b => {
+            const diffMs = b.dt.ts - startTs;
+            const pIdx = Math.floor(diffMs / (30 * 60 * 1000));
+            for (let p = Math.floor(b.l * 4); p <= Math.floor(b.h * 4); p++) {
+                if (!spMap[p]) spMap[p] = new Set();
+                spMap[p].add(pIdx);
+            }
+        });
+
+        const singles = [];
+        Object.keys(spMap).forEach(k => { if (spMap[k].size === 1) singles.push(Number(k)); });
+        singles.sort((a, b) => a - b);
+
+        let clusters = [];
+        if (singles.length > 0) {
+            let currentCluster = [singles[0]];
+            for (let i = 1; i < singles.length; i++) {
+                if (singles[i] === singles[i - 1] + 1) currentCluster.push(singles[i]);
+                else {
+                    if (currentCluster.length >= 8) clusters.push(currentCluster);
+                    currentCluster = [singles[i]];
+                }
+            }
+            if (currentCluster.length >= 8) clusters.push(currentCluster);
+        }
+
+        const res = [];
+        clusters.forEach(c => {
+            const botP = c[0] / 4;
+            const topP = c[c.length - 1] / 4;
+            res.push({ n: 'SP', p: topP, a: 1, d: 'LONG' });
+            res.push({ n: 'SP', p: botP, a: 1, d: 'SHORT' });
+        });
+        return res;
     }
 }
 
@@ -405,9 +674,9 @@ document.addEventListener('DOMContentLoaded', () => {
         currentData = res;
         updateTable(res);
         updateKPI(res);
+        if (logs) renderDebugLog(logs);
     };
 
-    // NEW Single Responsibility Function for Stats
     const renderStats = (data) => {
         const container = document.getElementById('stats-container');
         const tbody = document.getElementById('stats-body');
@@ -431,36 +700,50 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // 3. Render Rows
-        tbody.innerHTML = ''; // Wipe clean
-        const keys = Object.keys(stats).sort();
+        tbody.innerHTML = '';
+        Object.keys(stats).sort().forEach(lvl => {
+            const s = stats[lvl];
+            const winRate = ((s.wins / s.count) * 100).toFixed(0) + '%';
+            const cls = s.pnl >= 0 ? 'text-green' : 'text-red';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${lvl}</td><td>${s.count}</td><td>${winRate}</td><td class="${cls}">$${s.pnl.toFixed(2)}</td>`;
+            tbody.appendChild(tr);
+        });
+    };
 
-        if (keys.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="padding:10px; text-align:center; color:#666;">No Trades Yet</td></tr>';
+    // NEW Debug Log Render
+    const renderDebugLog = (logs) => {
+        const container = document.getElementById('debug-log-container');
+        const tbody = document.getElementById('debug-body');
+        if (!container || !tbody) return;
+
+        if (!logs || !logs.length) {
+            container.style.display = 'none';
             return;
         }
 
-        keys.forEach(key => {
-            const s = stats[key];
-            const winRate = Math.round((s.wins / s.count) * 100);
+        container.style.display = 'block';
+        tbody.innerHTML = '';
+        // Show last 1000 events
+        logs.slice(-1000).reverse().forEach(l => {
             const tr = document.createElement('tr');
-
-            // Simple inline styles to guarantee visibility
-            const colorWin = winRate >= 50 ? '#10b981' : '#ef4444';
-            const colorPnl = s.pnl >= 0 ? '#10b981' : '#ef4444';
+            let color = '#bababa';
+            if (l.e === 'Trade') color = '#00ff00';
+            if (l.e === 'Filter') color = '#ff5555';
 
             tr.innerHTML = `
-                <td style="padding:6px; border-bottom:1px solid #333;">${key}</td>
-                <td style="padding:6px; border-bottom:1px solid #333; text-align:center;">${s.count}</td>
-                <td style="padding:6px; border-bottom:1px solid #333; color:${colorWin};">${winRate}%</td>
-                <td style="padding:6px; border-bottom:1px solid #333; color:${colorPnl};">$${s.pnl.toFixed(0)}</td>
+                <td style="padding: 4px; border-bottom: 1px solid #333;">${l.d}</td>
+                <td style="padding: 4px; border-bottom: 1px solid #333;">${l.t}</td>
+                <td style="padding: 4px; border-bottom: 1px solid #333; color: ${color}; font-weight: bold;">${l.e}</td>
+                <td style="padding: 4px; border-bottom: 1px solid #333; word-break: break-all;">${l.m}</td>
             `;
             tbody.appendChild(tr);
         });
-
-        // Update Debug Info
-        const dbg = document.getElementById('debug-info');
-        if (dbg) dbg.textContent = `Status: Showing ${keys.length} Triggers (v1000)`;
     };
+
+
+
+
 
     const updateKPI = (res) => {
         try {
@@ -508,7 +791,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Best Level (Quick recalc)
             // ... (Skip complex best level logic for now to keep it safe, or reimplement simply)
             // Actually, we can just use the renderStats logic's byproduct if we wanted, but let's keep it simple.
-            setVal('kpi-best', 'Check Table');
+
 
             document.getElementById('results-panel').classList.remove('hidden');
             document.getElementById('dashboard').classList.remove('hidden');
@@ -604,14 +887,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 dday: document.getElementById('chk-dday').checked,
                 vwap: document.getElementById('chk-vwap').checked,
                 rnd: document.getElementById('chk-rnd').checked,
+                gap: document.getElementById('chk-gap').checked,
                 useDistReset: document.getElementById('chk-dist-reset').checked,
                 distReset: parseFloat(document.getElementById('inp-reset-dist').value) || 20,
+                orFilter: document.getElementById('chk-or-filter').checked,
+                dynamicTP: document.getElementById('chk-dynamic-tp').checked,
+                sp: document.getElementById('chk-sp').checked,
+                debug: document.getElementById('chk-debug').checked,
                 slip: 0, comm: 0, tpo_day: true
             };
 
             const eng = new Strategy(raw, cfg);
             const res = eng.run();
-            render(res);
+            render(res, eng.debugLogs);
         } catch (x) {
             alert(x);
             console.error(x);

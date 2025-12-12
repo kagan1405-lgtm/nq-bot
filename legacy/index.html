@@ -47,10 +47,7 @@
                 <span class="kpi-label">Total Trades</span>
                 <span class="kpi-value" id="kpi-count">0</span>
             </div>
-            <div class="kpi-card" style="border-left: 2px solid var(--primary);">
-                <span class="kpi-label">Best Performing Level</span>
-                <span class="kpi-value" style="font-size: 0.95rem" id="kpi-best">-</span>
-            </div>
+
         </div>
 
         <main>
@@ -86,6 +83,8 @@
                                     class="slider"></span><span>Prev Day (P-HD/LD)</span></label>
                             <label class="toggle"><input type="checkbox" id="chk-dday" checked><span
                                     class="slider"></span><span>Dynamic (D-HD/LD)</span></label>
+                            <label class="toggle"><input type="checkbox" id="chk-sp" checked><span
+                                    class="slider"></span><span>Single Prints</span></label>
                             <label class="toggle"><input type="checkbox" id="chk-vwap" checked><span
                                     class="slider"></span><span>VWAP</span></label>
                             <label class="toggle"><input type="checkbox" id="chk-rnd" checked><span
@@ -103,6 +102,21 @@
                                         style="width: 60px; padding: 4px;">
                                 </div>
                             </div>
+
+                            <div style="margin-top: 1rem; border-top: 1px solid #333; padding-top: 0.5rem;">
+                                <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.5rem;">Strategy
+                                    Enhancements
+                                </div>
+                                <label class="toggle"><input type="checkbox" id="chk-or-filter"><span
+                                        class="slider"></span><span>OR Filter (30m)</span></label>
+                                <label class="toggle"><input type="checkbox" id="chk-dynamic-tp"><span
+                                        class="slider"></span><span>Dynamic TP</span></label>
+                            </div>
+                            <!-- Debug Mode -->
+                            <div style="margin-top: 1rem; border-top: 1px solid #333; padding-top: 0.5rem;">
+                                <label class="toggle"><input type="checkbox" id="chk-debug"><span
+                                        class="slider"></span><span>Enable Debug Log (Console)</span></label>
+                            </div>
                         </div>
 
                         <button type="submit" id="run-btn" class="cta-button">
@@ -117,10 +131,9 @@
                     Status: Ready
                 </div>
 
-                <div class="card" id="stats-container"
-                    style="display:none; flex-direction:column; flex:1; overflow:hidden;">
+                <div class="card" id="stats-container" style="display:none; flex-direction:column; margin-top: auto;">
                     <h2>Trigger Stats</h2>
-                    <div style="overflow-y:auto;">
+                    <div style="width:100%;">
                         <table class="stats-table" style="width:100%; border: 1px solid #333;">
                             <thead>
                                 <tr style="background:#222; color:#fff;">
@@ -161,6 +174,31 @@
                         </thead>
                         <tbody id="trade-body"></tbody>
                     </table>
+                </div>
+                <!-- Debug Log Section (New) -->
+                <div id="debug-log-container" style="margin-top: 1.5rem; display: none;">
+                    <div
+                        style="background: rgba(30,30,40,0.9); border: 1px solid #444; border-radius: 8px; overflow: hidden;">
+                        <div
+                            style="padding: 10px; background: #2a2a35; border-bottom: 1px solid #444; font-weight: bold; color: #ccc; display: flex; justify-content: space-between;">
+                            <span>Decision Log (Debug)</span>
+                            <span style="font-size: 0.8em; opacity: 0.7;">Shows last 1000 events</span>
+                        </div>
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table id="debug-table"
+                                style="width: 100%; border-collapse: collapse; font-family: monospace; font-size: 0.8rem; color: #bababa;">
+                                <thead style="position: sticky; top: 0; background: #222; text-align: left;">
+                                    <tr>
+                                        <th style="padding: 8px;">Date</th>
+                                        <th style="padding: 8px;">Time</th>
+                                        <th style="padding: 8px;">Event</th>
+                                        <th style="padding: 8px;">Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="debug-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
