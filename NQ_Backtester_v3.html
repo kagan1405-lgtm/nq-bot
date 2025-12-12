@@ -464,26 +464,60 @@
                                 step="0.25"></div>
 
                         <div style="margin-bottom:1rem">
+                            <h6 class="text-secondary small text-uppercase">Session Levels</h6>
+                            <!-- 1. HN / LN -->
                             <label class="toggle"><input type="checkbox" id="chk-hnln" checked><span
                                     class="slider"></span><span>HN / LN</span></label>
+
+                            <!-- 2. (night)P-VPOC -->
                             <label class="toggle"><input type="checkbox" id="chk-npoc" checked><span
-                                    class="slider"></span><span>nPOC</span></label>
+                                    class="slider"></span><span>(night)P-VPOC</span></label>
+
+                            <!-- 3. (day)P-VPOC [NEW] -->
+                            <label class="toggle"><input type="checkbox" id="chk-day-vpoc" checked><span
+                                    class="slider"></span><span>(day)P-VPOC</span></label>
+
+                            <!-- 4. D-VPOC -->
+                            <label class="toggle"><input type="checkbox" id="chk-d-vpoc" checked><span
+                                    class="slider"></span><span>D-VPOC</span></label>
+
+                            <!-- 5. P-HVA/LVA (NIGHT) -->
                             <label class="toggle"><input type="checkbox" id="chk-hva" checked><span
-                                    class="slider"></span><span>HVA / LVA (70%)</span></label>
+                                    class="slider"></span><span>P-HVA/LVA (NIGHT)</span></label>
+
+                            <!-- 6. P-HVA/LVA (DAY) [NEW] -->
+                            <label class="toggle"><input type="checkbox" id="chk-day-hva" checked><span
+                                    class="slider"></span><span>P-HVA/LVA (DAY)</span></label>
+
+                            <!-- 7. D-HVA/LVA -->
+                            <label class="toggle"><input type="checkbox" id="chk-d-hva" checked><span
+                                    class="slider"></span><span>D-HVA/LVA</span></label>
+
+                            <!-- 8. P-HD/LD -->
                             <label class="toggle"><input type="checkbox" id="chk-pday" checked><span
-                                    class="slider"></span><span>Prev Day (P-HD/LD)</span></label>
-                            <label class="toggle"><input type="checkbox" id="chk-dev-tpo" checked><span
-                                    class="slider"></span><span>Developing TPO (d-POC/VA)</span></label>
+                                    class="slider"></span><span>P-HD/LD</span></label>
+
+                            <!-- 9. D-HD/LD -->
                             <label class="toggle"><input type="checkbox" id="chk-dday" checked><span
-                                    class="slider"></span><span>Dynamic (D-HD/LD)</span></label>
-                            <label class="toggle"><input type="checkbox" id="chk-sp" checked><span
-                                    class="slider"></span><span>Single Prints</span></label>
+                                    class="slider"></span><span>D-HD/LD</span></label>
+
+                            <h6 class="text-secondary small text-uppercase mt-2">Other</h6>
+                            <!-- 10. VWAP -->
                             <label class="toggle"><input type="checkbox" id="chk-vwap" checked><span
                                     class="slider"></span><span>VWAP</span></label>
-                            <label class="toggle"><input type="checkbox" id="chk-rnd" checked><span
-                                    class="slider"></span><span>Round Numbers</span></label>
+
+                            <!-- 11. Single Prints -->
+                            <label class="toggle"><input type="checkbox" id="chk-sp" checked><span
+                                    class="slider"></span><span>Single Prints</span></label>
+
+                            <!-- 12. Overnight Gaps -->
                             <label class="toggle"><input type="checkbox" id="chk-gap" checked><span
                                     class="slider"></span><span>Overnight Gaps</span></label>
+
+                            <!-- 13. Round Numbers -->
+                            <label class="toggle"><input type="checkbox" id="chk-rnd" checked><span
+                                    class="slider"></span><span>Round Numbers</span></label>
+
 
                             <div style="margin-top: 1rem; border-top: 1px solid #333; padding-top: 0.5rem;">
                                 <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.5rem;">Risk / Filters
@@ -707,7 +741,7 @@
         }
 
         class Strategy {
-            constructor(data, cfg) { this.d = data; this.c = cfg; this.T = []; this.debugLogs = []; }
+            constructor(data, cfg) { this.d = data; this.c = cfg; this.T = []; this.debugLogs = []; this.prevRthTPO = null; }
             run() {
                 const days = [...new Set(this.d.map(x => x.dt.getDateStr()))].sort();
                 let pH = null, pL = null, pClose = 0, prevClosePrice = null; // pClose is TS, prevClosePrice is Price
@@ -720,6 +754,15 @@
 
                     if (!rth.length) return;
                     let lvls = [];
+
+                    // --- DAY TPO LEVELS (From Previous Day) ---
+                    if (this.prevRthTPO) {
+                        if (this.c.day_vpoc) lvls.push({ n: '(day)P-VPOC', p: this.prevRthTPO.poc, a: 1, d: 'BOTH' });
+                        if (this.c.day_hva) {
+                            lvls.push({ n: 'P-HVA (DAY)', p: this.prevRthTPO.hva, a: 1, d: 'SHORT' });
+                            lvls.push({ n: 'P-LVA (DAY)', p: this.prevRthTPO.lva, a: 1, d: 'LONG' });
+                        }
+                    }
 
                     if (pH !== null) {
                         const openTs = rth[0].dt.ts;
@@ -780,37 +823,9 @@
                             const hN = Math.max(...night.map(b => b.h));
                             const lN = Math.min(...night.map(b => b.l));
 
-                            // --- TPO HELPER ---
-                            const calcTPO = (bars) => {
-                                const counts = {};
-                                bars.forEach(b => {
-                                    for (let p = Math.floor(b.l * 4); p <= Math.floor(b.h * 4); p++)
-                                        counts[p] = (counts[p] || 0) + 1;
-                                });
-                                const sortedPrices = Object.keys(counts).map(Number).sort((a, b) => a - b);
-                                const totalTPO = Object.values(counts).reduce((a, b) => a + b, 0);
-                                let maxC = -1, pocTick = 0;
-                                for (const p of sortedPrices) { if (counts[p] > maxC) { maxC = counts[p]; pocTick = p; } }
-
-                                const target = totalTPO * 0.7;
-                                let current = maxC, upIdx = sortedPrices.indexOf(pocTick) + 1, dnIdx = sortedPrices.indexOf(pocTick) - 1;
-
-                                while (current < target) {
-                                    const upVol = (upIdx < sortedPrices.length) ? counts[sortedPrices[upIdx]] : 0;
-                                    const dnVol = (dnIdx >= 0) ? counts[sortedPrices[dnIdx]] : 0;
-                                    if (upVol === 0 && dnVol === 0) break;
-                                    if (upVol >= dnVol) { current += upVol; upIdx++; if (dnVol > 0 && current < target) { current += dnVol; dnIdx--; } }
-                                    else { current += dnVol; dnIdx--; }
-                                }
-                                return {
-                                    hva: sortedPrices[Math.min(upIdx - 1, sortedPrices.length - 1)] / 4,
-                                    lva: sortedPrices[Math.max(dnIdx + 1, 0)] / 4,
-                                    poc: pocTick / 4
-                                };
-                            };
-
+                            // --- TPO HELPER (Moved to Method) ---
                             // 1. Standard
-                            const tpoStandard = calcTPO(night);
+                            const tpoStandard = this.calcTPO(night);
 
                             // 2. Globez (18:00 Start approx)
                             let globezStartTs = pClose + 3600000;
@@ -833,19 +848,20 @@
 
                             const nightGlobez = night.filter(b => b.dt.ts >= globezStartTs);
                             // Fallback to Standard if Globez empty
-                            const tpoGlobez = nightGlobez.length ? calcTPO(nightGlobez) : tpoStandard;
+                            // Fallback to Standard if Globez empty
+                            const tpoGlobez = nightGlobez.length ? this.calcTPO(nightGlobez) : tpoStandard;
 
                             // USE GLOBEZ (18:00 Start) to match standard trader profiles
                             const { hva, lva, poc } = tpoGlobez;
 
-                            if (this.c.npoc) lvls.push({ n: 'nPOC', p: poc, a: 1, d: 'BOTH' });
+                            if (this.c.npoc) lvls.push({ n: '(night)P-VPOC', p: poc, a: 1, d: 'BOTH' });
                             if (this.c.hnln) {
                                 lvls.push({ n: 'HN', p: hN, a: 1, d: 'SHORT' });
                                 lvls.push({ n: 'LN', p: lN, a: 1, d: 'LONG' });
                             }
                             if (this.c.hva) {
-                                lvls.push({ n: 'HVA', p: hva, a: 1, d: 'SHORT' });
-                                lvls.push({ n: 'LVA', p: lva, a: 1, d: 'LONG' });
+                                lvls.push({ n: 'P-HVA (NIGHT)', p: hva, a: 1, d: 'SHORT' });
+                                lvls.push({ n: 'P-LVA (NIGHT)', p: lva, a: 1, d: 'LONG' });
                             }
                         }
 
@@ -921,10 +937,11 @@
 
                     this.sim(rth, lvls);
                     pH = Math.max(...rth.map(b => b.h)); pL = Math.min(...rth.map(b => b.l));
-                    if (rth.length) {
-                        this.prevClosePrice = rth[rth.length - 1].c;
-                        pClose = rth[rth.length - 1].dt.ts;
-                    }
+                    this.prevClosePrice = rth[rth.length - 1].c;
+                    pClose = rth[rth.length - 1].dt.ts;
+
+                    // Calculate RTH TPO for Next Day
+                    this.prevRthTPO = this.calcTPO(rth);
 
                     // --- POST-SESSION SP UPDATE ---
                     if (this.c.sp) {
@@ -1004,10 +1021,10 @@
                     };
 
                     // DECOUPLED: Controlled by new Checkbox
-                    if (this.c.dev_tpo) {
-                        updateDynLvl('d-POC', dTPO.poc, 'BOTH');
-                        updateDynLvl('d-HVA', dTPO.hva, 'SHORT'); // Value High -> Short
-                        updateDynLvl('d-LVA', dTPO.lva, 'LONG');  // Value Low -> Long
+                    if (this.c.d_vpoc) updateDynLvl('D-VPOC', dTPO.poc, 'BOTH');
+                    if (this.c.d_hva) {
+                        updateDynLvl('D-HVA', dTPO.hva, 'SHORT'); // Value High -> Short
+                        updateDynLvl('D-LVA', dTPO.lva, 'LONG');  // Value Low -> Long
                     }
 
                     // 0. Force Close at 16:55 (1015 min)
@@ -1162,7 +1179,7 @@
                                     // If SL Hit and Feature Enabled for specific levels
                                     if (st === 'L' && this.c.useDistReset) {
                                         // Include new Dynamic TPO levels in locking logic
-                                        const targetTypes = ['VWAP', 'nPOC', 'mPOC', 'RN', 'd-POC'];
+                                        const targetTypes = ['VWAP', 'nPOC', '(night)P-VPOC', '(day)P-VPOC', 'mPOC', 'RN', 'd-POC', 'D-VPOC', 'P-HVA (NIGHT)', 'P-HVA (DAY)'];
                                         const levelObj = lvls.find(l => l.n === pos.ln || (l.n.startsWith('RN') && pos.ln.startsWith('RN')));
 
                                         if (levelObj && (targetTypes.includes(levelObj.n) || levelObj.n.startsWith('RN'))) {
@@ -1216,8 +1233,8 @@
                                 let potentials = [];
                                 for (let l of active) {
                                     // 2. Dynamic Level Settlement Rule (User Deviation)
-                                    // If D-HD, D-LD, d-POC, d-HVA, d-LVA -> Must be at least 5 mins old.
-                                    const dynLevels = ['D-HD', 'D-LD', 'd-POC', 'd-HVA', 'd-LVA'];
+                                    // If D-HD, D-LD, D-VPOC, D-HVA, D-LVA -> Must be at least 5 mins old.
+                                    const dynLevels = ['D-HD', 'D-LD', 'd-POC', 'D-VPOC', 'd-HVA', 'D-HVA', 'd-LVA', 'D-LVA'];
                                     if (dynLevels.includes(l.n)) {
                                         // If updated undefined (legacy), assume okay. If defined, check diff.
                                         if (l.updated !== undefined && (currentMin - l.updated < 5)) continue;
@@ -1324,6 +1341,33 @@
                         } // end segment
                     }
                 }
+            }
+            calcTPO(bars) {
+                const counts = {};
+                bars.forEach(b => {
+                    for (let p = Math.floor(b.l * 4); p <= Math.floor(b.h * 4); p++)
+                        counts[p] = (counts[p] || 0) + 1;
+                });
+                const sortedPrices = Object.keys(counts).map(Number).sort((a, b) => a - b);
+                const totalTPO = Object.values(counts).reduce((a, b) => a + b, 0);
+                let maxC = -1, pocTick = 0;
+                for (const p of sortedPrices) { if (counts[p] > maxC) { maxC = counts[p]; pocTick = p; } }
+
+                const target = totalTPO * 0.7;
+                let current = maxC, upIdx = sortedPrices.indexOf(pocTick) + 1, dnIdx = sortedPrices.indexOf(pocTick) - 1;
+
+                while (current < target) {
+                    const upVol = (upIdx < sortedPrices.length) ? counts[sortedPrices[upIdx]] : 0;
+                    const dnVol = (dnIdx >= 0) ? counts[sortedPrices[dnIdx]] : 0;
+                    if (upVol === 0 && dnVol === 0) break;
+                    if (upVol >= dnVol) { current += upVol; upIdx++; if (dnVol > 0 && current < target) { current += dnVol; dnIdx--; } }
+                    else { current += dnVol; dnIdx--; }
+                }
+                return {
+                    hva: sortedPrices[Math.min(upIdx - 1, sortedPrices.length - 1)] / 4,
+                    lva: sortedPrices[Math.max(dnIdx + 1, 0)] / 4,
+                    poc: pocTick / 4
+                };
             }
             getSPs(bars) {
                 if (!bars || !bars.length) return [];
@@ -1594,20 +1638,35 @@
                         tp: +data.get('tp_points'),
                         sl: +data.get('sl_points'),
                         off: +data.get('offset_points'),
+
+                        // 1. HN / LN
                         hnln: document.getElementById('chk-hnln').checked,
+                        // 2. (night)P-VPOC
                         npoc: document.getElementById('chk-npoc').checked,
+                        // 3. (day)P-VPOC
+                        day_vpoc: document.getElementById('chk-day-vpoc').checked,
+                        // 4. D-VPOC
+                        d_vpoc: document.getElementById('chk-d-vpoc').checked,
+                        // 5. P-HVA/LVA (NIGHT)
                         hva: document.getElementById('chk-hva').checked,
+                        // 6. P-HVA/LVA (DAY)
+                        day_hva: document.getElementById('chk-day-hva').checked,
+                        // 7. D-HVA/LVA
+                        d_hva: document.getElementById('chk-d-hva').checked,
+                        // 8. P-HD/LD
                         pday: document.getElementById('chk-pday').checked,
-                        dev_tpo: document.getElementById('chk-dev-tpo').checked,
+                        // 9. D-HD/LD
                         dday: document.getElementById('chk-dday').checked,
+
                         vwap: document.getElementById('chk-vwap').checked,
                         rnd: document.getElementById('chk-rnd').checked,
                         gap: document.getElementById('chk-gap').checked,
-                        useDistReset: document.getElementById('chk-dist-reset').checked,
-                        distReset: parseFloat(document.getElementById('inp-reset-dist').value) || 20,
+                        sp: document.getElementById('chk-sp').checked,
+
                         orFilter: document.getElementById('chk-or-filter').checked,
                         dynamicTP: document.getElementById('chk-dynamic-tp').checked,
-                        sp: document.getElementById('chk-sp').checked,
+                        useDistReset: document.getElementById('chk-dist-reset').checked,
+                        distReset: parseFloat(document.getElementById('inp-reset-dist').value) || 20,
                         debug: document.getElementById('chk-debug').checked,
                         slip: 0, comm: 0, tpo_day: true
                     };
