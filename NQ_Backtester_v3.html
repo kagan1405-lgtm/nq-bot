@@ -125,7 +125,8 @@
         }
 
         .control-panel {
-            width: 280px;
+            width: 340px;
+            /* Widened from 280px */
             display: flex;
             flex-direction: column;
             gap: 1rem;
@@ -301,6 +302,13 @@
             border-bottom: 1px solid #333;
         }
 
+        .stats-table td:first-child {
+            white-space: nowrap;
+            /* Prevent wrapping */
+            min-width: 120px;
+            /* Give it enough room */
+        }
+
         /* Main Results Table */
         .results-header {
             padding: 0.8rem;
@@ -319,7 +327,7 @@
         table.main-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }
 
         .main-table th {
@@ -353,7 +361,8 @@
         }
 
         .main-table td {
-            padding: 0.3rem 0.4rem;
+            padding: 0.15rem 0.25rem;
+            /* Extra Tighter padding */
             border-bottom: 1px solid var(--border);
             white-space: nowrap;
         }
@@ -1457,9 +1466,36 @@
                     if (t.pnl > 0) stats[k].wins++;
                 });
 
-                // 3. Render Rows
+                // 3. Render Rows (Ordered by Logical Groups)
+                const order = [
+                    'HN', 'LN',
+                    '(night)P-VPOC',
+                    '(day)P-VPOC',
+                    'D-VPOC',
+                    'P-HVA (NIGHT)', 'P-LVA (NIGHT)',
+                    'P-HVA (DAY)', 'P-LVA (DAY)',
+                    'D-HVA', 'D-LVA',
+                    'P-HD', 'P-LD',
+                    'D-HD', 'D-LD',
+                    'VWAP',
+                    'SP',
+                    'GAP',
+                    'Round'
+                ];
+
                 tbody.innerHTML = '';
-                Object.keys(stats).sort().forEach(lvl => {
+
+                // Sort keys based on 'order' list, putting unknowns at the end
+                const sortedKeys = Object.keys(stats).sort((a, b) => {
+                    const idxA = order.indexOf(a);
+                    const idxB = order.indexOf(b);
+                    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                    if (idxA !== -1) return -1;
+                    if (idxB !== -1) return 1;
+                    return a.localeCompare(b);
+                });
+
+                sortedKeys.forEach(lvl => {
                     const s = stats[lvl];
                     const winRate = ((s.wins / s.count) * 100).toFixed(0) + '%';
                     const cls = s.pnl >= 0 ? 'text-green' : 'text-red';
